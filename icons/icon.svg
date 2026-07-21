@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#0d5c4d"/>
+  <circle cx="415" cy="97" r="74" fill="#176f5e" opacity=".7"/>
+  <rect x="96" y="96" width="320" height="320" rx="92" fill="#f4c76b"/>
+  <path d="M145 358c56 28 154 34 222-6" fill="none" stroke="#d79f35" stroke-width="18" stroke-linecap="round" opacity=".55"/>
+  <text x="256" y="331" text-anchor="middle" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif" font-size="190" font-weight="800" fill="#0d493e">账</text>
+</svg>
