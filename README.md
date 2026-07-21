@@ -2,6 +2,10 @@
 
 一款利润优先的个人记账 PWA，支持 GPT Plus、5x、20x 业务流水、客户充值习惯、个人支出，以及电脑与安卓手机自动同步。
 
+## 在线使用
+
+- [打开账清网页版](https://gengzm97-lang.github.io/zhangqing-ledger/)
+
 ## 功能
 
 - 逐笔记录收入、成本和利润
