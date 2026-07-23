@@ -25,7 +25,8 @@
         <button class="nav-item active" data-page="dashboard"><span>⌁</span>经营看板</button>
         <button class="nav-item" data-page="orders"><span>▤</span>订单流水</button>
         <button class="nav-item" data-page="customers"><span>◎</span>客户管理</button>
-        <button class="nav-item" data-page="expenses"><span>¥</span>个人支出</button>
+        <button class="nav-item" data-page="expenses"><span>¥</span>个人账本</button>
+        <button class="nav-item" data-page="monthly"><span>▥</span>月度收支</button>
         <button class="nav-item" data-page="settings"><span>⚙</span>数据管理</button>
       </nav>
       <div class="sidebar-foot">
@@ -232,6 +233,41 @@
           </div>
           <div id="expensesEmpty" class="empty-state hidden"></div>
         </div>
+      </section>
+
+      <section id="monthlyPage" class="page">
+        <div class="toolbar filter-bar monthly-toolbar">
+          <label class="monthly-year-field"><span>查看年度</span><select id="monthlyYearFilter" aria-label="选择月度收支年份"></select></label>
+          <p class="monthly-note">个人收入按实际到账月、支出按实际发生月汇总；GPT 业务利润保持独立。</p>
+          <button class="button ghost" data-goto="expenses">去个人账本记账</button>
+        </div>
+
+        <div id="monthlySummaryCards" class="summary-grid"></div>
+
+        <article class="panel monthly-chart-panel">
+          <div class="panel-head">
+            <div><p class="eyebrow">按月合并</p><h2>每月收入、支出与结余</h2></div>
+            <div class="legend">
+              <span><i class="personal-income"></i>收入</span>
+              <span><i class="expense"></i>支出</span>
+              <span><i class="balance"></i>结余</span>
+            </div>
+          </div>
+          <div class="chart-wrap monthly-chart-wrap">
+            <canvas id="monthlyCashflowChart" aria-label="月度个人收支趋势图"></canvas>
+            <div id="monthlyChartTooltip" class="chart-tooltip monthly-chart-tooltip hidden"></div>
+          </div>
+        </article>
+
+        <article class="panel monthly-table-panel">
+          <div class="panel-head"><div><p class="eyebrow">逐月核对</p><h2>月度收支明细</h2></div></div>
+          <div class="monthly-table-wrap">
+            <table>
+              <thead><tr><th>月份</th><th class="num">收入</th><th class="num">补助</th><th class="num">劳务</th><th class="num">支出</th><th class="num">结余</th></tr></thead>
+              <tbody id="monthlyCashflowTableBody"></tbody>
+            </table>
+          </div>
+        </article>
       </section>
 
       <section id="settingsPage" class="page">

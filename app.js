@@ -9,12 +9,14 @@ const PAGE_META = {
   orders: ["收支明细", "每一笔，都清清楚楚"],
   customers: ["客户运营", "了解每一位老客户"],
   expenses: ["个人账本", "个人收支，一眼看清"],
+  monthly: ["月度收支", "每个月收了多少、花了多少？"],
   settings: ["安全与备份", "数据由你掌控"]
 };
 
 let state = loadState();
 let currentRange = "month";
 let expenseRange = "month";
+let monthlyYear = String(new Date().getFullYear());
 let activePage = "dashboard";
 let confirmAction = null;
 let resizeTimer = null;
@@ -577,6 +579,211 @@ function hideExpenseTrendTooltip() {
   $("#expenseTrendChart").style.cursor = "default";
 }
 
+function monthlyAvailableYears() {
+  const years = new Set([new Date().getFullYear()]);
+  [...state.personalIncomes, ...state.expenses].forEach(item => {
+    const date = parseLocalDate(item.date);
+    if (!Number.isNaN(date.getTime())) years.add(date.getFullYear());
+  });
+  return [...years].sort((a, b) => b - a);
+}
+
+function monthlyCashflowPoints(yearValue = monthlyYear) {
+  const year = Number(yearValue);
+  const now = new Date();
+  const lastMonth = year === now.getFullYear() ? now.getMonth() : 11;
+  const points = Array.from({ length: lastMonth + 1 }, (_, monthIndex) => {
+    const key = `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
+    return {
+      key,
+      label: `${monthIndex + 1}月`,
+      fullLabel: `${year}年${monthIndex + 1}月`,
+      income: 0,
+      subsidy: 0,
+      labor: 0,
+      otherIncome: 0,
+      incomeCount: 0,
+      expense: 0,
+      expenseCount: 0,
+      balance: 0
+    };
+  });
+  const byKey = new Map(points.map(point => [point.key, point]));
+  state.personalIncomes.forEach(income => {
+    const point = byKey.get(monthKey(income.date));
+    if (!point) return;
+    const amount = Number(income.amount) || 0;
+    point.income += amount;
+    point.incomeCount += 1;
+    if (income.type === "补助") point.subsidy += amount;
+    else if (income.type === "劳务") point.labor += amount;
+    else point.otherIncome += amount;
+  });
+  state.expenses.forEach(expense => {
+    const point = byKey.get(monthKey(expense.date));
+    if (!point) return;
+    point.expense += Number(expense.amount) || 0;
+    point.expenseCount += 1;
+  });
+  points.forEach(point => point.balance = point.income - point.expense);
+  return points;
+}
+
+function renderMonthlyReport() {
+  const years = monthlyAvailableYears();
+  if (!years.map(String).includes(String(monthlyYear))) monthlyYear = String(years[0]);
+  $("#monthlyYearFilter").innerHTML = years.map(year => `<option value="${year}">${year} 年</option>`).join("");
+  $("#monthlyYearFilter").value = String(monthlyYear);
+  const points = monthlyCashflowPoints();
+  const totalIncome = sum(points, point => point.income);
+  const totalExpense = sum(points, point => point.expense);
+  const balance = totalIncome - totalExpense;
+  const subsidy = sum(points, point => point.subsidy);
+  const labor = sum(points, point => point.labor);
+  const activeMonths = points.filter(point => point.incomeCount || point.expenseCount).length;
+  const cards = [
+    ["年度结余", money(balance, true), `收入 ${money(totalIncome, true)} · 支出 ${money(totalExpense, true)}`, `balance-card ${balance < 0 ? "loss-card" : ""}`],
+    ["年度收入", money(totalIncome, true), `补助 ${money(subsidy, true)} · 劳务 ${money(labor, true)}`, "income-summary-card"],
+    ["年度支出", money(totalExpense, true), `${sum(points, point => point.expenseCount)} 笔个人支出`, "expense-summary-card"],
+    ["有记录月份", `${activeMonths} 个月`, `当前显示 ${monthlyYear} 年`, "allowance-summary-card"]
+  ];
+  $("#monthlySummaryCards").innerHTML = cards.map(([label, value, note, cls]) => `
+    <article class="summary-card ${cls}"><div class="label"><i></i>${label}</div><strong>${value}</strong><small>${note}</small></article>`).join("");
+  $("#monthlyCashflowTableBody").innerHTML = [...points].reverse().map(point => `<tr>
+    <td><strong>${escapeHtml(point.fullLabel)}</strong></td>
+    <td class="num income-amount">${money(point.income)}</td>
+    <td class="num">${money(point.subsidy)}</td>
+    <td class="num">${money(point.labor)}</td>
+    <td class="num expense-amount">${money(point.expense)}</td>
+    <td class="num ${point.balance >= 0 ? "profit-positive" : "profit-negative"}">${money(point.balance)}</td>
+  </tr>`).join("");
+  renderMonthlyCashflowChart(points);
+}
+
+function renderMonthlyCashflowChart(points) {
+  const canvas = $("#monthlyCashflowChart");
+  const tooltip = $("#monthlyChartTooltip");
+  tooltip.classList.add("hidden");
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  const width = rect.width, height = rect.height;
+  const pad = { left: 51, right: 13, top: 18, bottom: 30 };
+  const chartW = width - pad.left - pad.right, chartH = height - pad.top - pad.bottom;
+  const maxVal = Math.max(1, ...points.flatMap(point => [point.income, point.expense, point.balance]));
+  const minVal = Math.min(0, ...points.map(point => point.balance));
+  const range = maxVal - minVal || 1;
+  const x = index => pad.left + (points.length === 1 ? chartW / 2 : index / (points.length - 1) * chartW);
+  const y = value => pad.top + (maxVal - value) / range * chartH;
+  const zeroY = y(0);
+  ctx.clearRect(0, 0, width, height);
+  ctx.font = "10px Microsoft YaHei";
+  ctx.strokeStyle = "#e7ecea";
+  ctx.fillStyle = "#87928f";
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const value = maxVal - range * i / 4;
+    const yy = pad.top + chartH * i / 4;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, yy);
+    ctx.lineTo(width - pad.right, yy);
+    ctx.stroke();
+    const axisLabel = Math.abs(value) >= 10000 ? `${(value / 10000).toFixed(1)}万` : maxVal <= 5 ? value.toFixed(1).replace(/\.0$/, "") : Math.round(value);
+    ctx.textAlign = "right";
+    ctx.fillText(axisLabel, pad.left - 8, yy + 3);
+  }
+  if (minVal < 0) {
+    ctx.strokeStyle = "#c7d0cc";
+    ctx.beginPath();
+    ctx.moveTo(pad.left, zeroY);
+    ctx.lineTo(width - pad.right, zeroY);
+    ctx.stroke();
+  }
+
+  const barWidth = Math.max(3, Math.min(13, chartW / Math.max(1, points.length * 3)));
+  points.forEach((point, index) => {
+    const center = x(index);
+    const incomeY = y(point.income);
+    const expenseY = y(point.expense);
+    ctx.fillStyle = "#347862";
+    ctx.fillRect(center - barWidth - 1, incomeY, barWidth, Math.max(0, zeroY - incomeY));
+    ctx.fillStyle = "#b66a5e";
+    ctx.fillRect(center + 1, expenseY, barWidth, Math.max(0, zeroY - expenseY));
+  });
+
+  ctx.beginPath();
+  points.forEach((point, index) => index ? ctx.lineTo(x(index), y(point.balance)) : ctx.moveTo(x(index), y(point.balance)));
+  ctx.strokeStyle = "#c48822";
+  ctx.lineWidth = 2.2;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.stroke();
+  points.forEach((point, index) => {
+    ctx.beginPath();
+    ctx.arc(x(index), y(point.balance), 3, 0, Math.PI * 2);
+    ctx.fillStyle = "#fff";
+    ctx.fill();
+    ctx.strokeStyle = "#c48822";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  });
+
+  ctx.fillStyle = "#87928f";
+  ctx.textAlign = "center";
+  const labelStep = Math.max(1, Math.ceil(points.length / 7));
+  points.forEach((point, index) => {
+    if (index % labelStep === 0 || index === points.length - 1) ctx.fillText(point.label, x(index), height - 9);
+  });
+  canvas._monthlyChartData = {
+    points,
+    xPositions: points.map((_, index) => x(index)),
+    yPositions: points.map(point => y(point.balance)),
+    width
+  };
+}
+
+function showMonthlyChartTooltip(event) {
+  const canvas = $("#monthlyCashflowChart");
+  const data = canvas._monthlyChartData;
+  const tooltip = $("#monthlyChartTooltip");
+  if (!data?.points?.length) return;
+  const rect = canvas.getBoundingClientRect();
+  const pointerX = event.clientX - rect.left;
+  let index = 0;
+  let distance = Infinity;
+  data.xPositions.forEach((position, pointIndex) => {
+    const current = Math.abs(position - pointerX);
+    if (current < distance) {
+      distance = current;
+      index = pointIndex;
+    }
+  });
+  const spacing = data.xPositions.length > 1 ? Math.abs(data.xPositions[1] - data.xPositions[0]) : 80;
+  if (distance > Math.max(18, Math.min(42, spacing / 2))) {
+    tooltip.classList.add("hidden");
+    canvas.style.cursor = "default";
+    return;
+  }
+  const point = data.points[index];
+  tooltip.innerHTML = `<strong>${escapeHtml(point.fullLabel)}</strong><span>个人收入<b>${money(point.income)}</b></span><span>个人支出<b>${money(point.expense)}</b></span><span>当月结余<b>${money(point.balance)}</b></span><span>记录笔数<b>${point.incomeCount} 收入 · ${point.expenseCount} 支出</b></span>`;
+  tooltip.classList.remove("hidden");
+  const half = tooltip.offsetWidth / 2;
+  const left = Math.max(half + 5, Math.min(data.width - half - 5, data.xPositions[index]));
+  const above = data.yPositions[index] - tooltip.offsetHeight - 12;
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${above > 3 ? above : data.yPositions[index] + 12}px`;
+  canvas.style.cursor = "pointer";
+}
+
+function hideMonthlyChartTooltip() {
+  $("#monthlyChartTooltip").classList.add("hidden");
+  $("#monthlyCashflowChart").style.cursor = "default";
+}
+
 function renderRecentOrders() {
   const orders = [...state.orders].sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date)).slice(0, 5);
   $("#recentOrders").innerHTML = orders.length ? orders.map(o => `<div class="compact-item">
@@ -945,6 +1152,7 @@ function renderAll() {
   renderOrders();
   renderCustomers();
   renderExpenses();
+  renderMonthlyReport();
 }
 
 function renderCustomerOptions() {
@@ -957,14 +1165,15 @@ function switchPage(page) {
   $$(".nav-item").forEach(item => item.classList.toggle("active", item.dataset.page === page));
   $("#eyebrow").textContent = PAGE_META[page][0];
   $("#pageTitle").textContent = PAGE_META[page][1];
-  $("#quickCustomerBtn").classList.toggle("hidden", page === "expenses" || page === "settings");
-  $("#quickOrderBtn").classList.toggle("hidden", page === "settings");
+  $("#quickCustomerBtn").classList.toggle("hidden", page === "expenses" || page === "monthly" || page === "settings");
+  $("#quickOrderBtn").classList.toggle("hidden", page === "monthly" || page === "settings");
   $("#quickOrderBtn").textContent = page === "expenses" ? "＋ 记支出" : "＋ 记一笔";
   $(".sidebar").classList.remove("open");
   if (page === "dashboard") setTimeout(() => renderTrendChart(dashboardOrders()), 30);
   if (page === "orders") renderOrders();
   if (page === "customers") renderCustomers();
   if (page === "expenses") renderExpenses();
+  if (page === "monthly") renderMonthlyReport();
 }
 
 function openDrawer(id) {
@@ -1206,12 +1415,19 @@ function initEvents() {
   $("#expenseTrendChart").addEventListener("mousemove", showExpenseTrendTooltip);
   $("#expenseTrendChart").addEventListener("mouseleave", hideExpenseTrendTooltip);
   $("#expenseTrendChart").addEventListener("click", showExpenseTrendTooltip);
+  $("#monthlyCashflowChart").addEventListener("mousemove", showMonthlyChartTooltip);
+  $("#monthlyCashflowChart").addEventListener("mouseleave", hideMonthlyChartTooltip);
+  $("#monthlyCashflowChart").addEventListener("click", showMonthlyChartTooltip);
   $$("#datePresets button").forEach(btn => btn.addEventListener("click", () => setDateRange(btn.dataset.range)));
   $("#startDate").addEventListener("change", () => { currentRange = "custom"; $$("#datePresets button").forEach(b => b.classList.remove("active")); renderDashboard(); });
   $("#endDate").addEventListener("change", () => { currentRange = "custom"; $$("#datePresets button").forEach(b => b.classList.remove("active")); renderDashboard(); });
   $$("#expenseDatePresets button").forEach(btn => btn.addEventListener("click", () => setExpenseDateRange(btn.dataset.range)));
   $("#expenseStartDate").addEventListener("change", () => { expenseRange = "custom"; $$("#expenseDatePresets button").forEach(b => b.classList.remove("active")); renderExpenses(); });
   $("#expenseEndDate").addEventListener("change", () => { expenseRange = "custom"; $$("#expenseDatePresets button").forEach(b => b.classList.remove("active")); renderExpenses(); });
+  $("#monthlyYearFilter").addEventListener("change", event => {
+    monthlyYear = event.target.value;
+    renderMonthlyReport();
+  });
   ["#orderSearch", "#productFilter", "#serviceFilter", "#orderSort"].forEach(id => $(id).addEventListener(id === "#orderSearch" ? "input" : "change", renderOrders));
   ["#customerSearch", "#customerFilter"].forEach(id => $(id).addEventListener(id === "#customerSearch" ? "input" : "change", renderCustomers));
   ["#expenseSearch", "#expenseCategoryFilter"].forEach(id => $(id).addEventListener(id === "#expenseSearch" ? "input" : "change", renderExpenses));
@@ -1265,6 +1481,7 @@ function initEvents() {
     resizeTimer = setTimeout(() => {
       if (activePage === "dashboard") renderTrendChart(dashboardOrders());
       if (activePage === "expenses") renderExpenseTrendChart(expenseRangeItems());
+      if (activePage === "monthly") renderMonthlyCashflowChart(monthlyCashflowPoints());
     }, 120);
   });
 }

@@ -105,8 +105,10 @@ input:focus, select:focus, textarea:focus { border-color: #3f8d7c; box-shadow: 0
 .legend .revenue { background: #a9b7b2; }
 .legend .profit { background: var(--green); }
 .legend .expense { background: #b66a5e; }
+.legend .personal-income { background: #347862; }
+.legend .balance { background: #de9b2a; }
 .chart-wrap { height: 244px; margin-top: 15px; position: relative; }
-#trendChart, #expenseTrendChart { width: 100%; height: 100%; }
+#trendChart, #expenseTrendChart, #monthlyCashflowChart { width: 100%; height: 100%; }
 .chart-tooltip { position: absolute; z-index: 3; min-width: 132px; padding: 10px 12px; color: #fff; background: rgba(18, 53, 44, .96); border-radius: 10px; box-shadow: 0 8px 24px rgba(8, 43, 35, .2); pointer-events: none; transform: translateX(-50%); }
 .chart-tooltip strong { display: block; margin-bottom: 6px; color: #f4c76b; font-size: 11px; }
 .chart-tooltip span { display: flex; align-items: center; justify-content: space-between; gap: 15px; font-size: 11px; line-height: 1.7; }
@@ -152,6 +154,17 @@ input:focus, select:focus, textarea:focus { border-color: #3f8d7c; box-shadow: 0
 .pill.income-type { color: #28634f; background: #e8f3ef; }
 .pill.income-type.labor { color: #8a6222; background: var(--amber-soft); }
 .income-help-note { margin-top: 20px; padding: 13px 14px; color: #3f6759; border: 1px solid #cfe1da; border-radius: 11px; background: #f3f9f6; font-size: 11px; line-height: 1.6; }
+.monthly-toolbar { padding: 14px 16px; border: 1px solid var(--line); border-radius: 13px; background: #fff; }
+.monthly-year-field { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 11px; font-weight: 700; }
+.monthly-year-field select { min-width: 116px; padding: 9px 32px 9px 11px; }
+.monthly-note { flex: 1; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.monthly-chart-panel { margin-bottom: 18px; }
+.monthly-chart-wrap { height: 300px; }
+.monthly-chart-tooltip { background: rgba(30, 65, 55, .97); }
+.monthly-table-panel { padding-bottom: 0; overflow: hidden; }
+.monthly-table-wrap { margin: 14px -21px 0; overflow-x: auto; border-top: 1px solid var(--line); }
+.monthly-table-wrap th:first-child, .monthly-table-wrap td:first-child { padding-left: 21px; }
+.monthly-table-wrap th:last-child, .monthly-table-wrap td:last-child { padding-right: 21px; }
 .expense-trend-panel { margin-bottom: 18px; }
 .expense-chart-tooltip { background: rgba(100, 54, 48, .96); box-shadow: 0 8px 24px rgba(100, 54, 48, .2); }
 .expense-chart-tooltip strong { color: #f7cf91; }
@@ -365,6 +378,13 @@ tbody tr:hover { background: #fbfdfc; }
   .income-table-wrap { margin-left: -16px; margin-right: -16px; }
   .income-table-wrap th:first-child, .income-table-wrap td:first-child { padding-left: 16px; }
   .income-table-wrap th:last-child, .income-table-wrap td:last-child { padding-right: 16px; }
+  .monthly-toolbar { align-items: stretch; }
+  .monthly-year-field { justify-content: space-between; }
+  .monthly-year-field select { flex: 1; }
+  .monthly-chart-wrap { height: 260px; }
+  .monthly-table-wrap { margin-left: -16px; margin-right: -16px; }
+  .monthly-table-wrap th:first-child, .monthly-table-wrap td:first-child { padding-left: 16px; }
+  .monthly-table-wrap th:last-child, .monthly-table-wrap td:last-child { padding-right: 16px; }
   .segmented { overflow-x: auto; }
   .segmented button { flex: 1; white-space: nowrap; }
   .date-range { justify-content: space-between; }
