@@ -49,6 +49,9 @@ button { cursor: pointer; }
 .button.danger { color: #fff; background: var(--red); }
 .button.expense-button, .expense-button { color: #fff; border-color: #9b574d; background: #9b574d; box-shadow: 0 5px 14px rgba(155,87,77,.18); }
 .button.expense-button:hover, .expense-button:hover { background: #82463e; }
+.button.income-button, .income-button { color: #fff; border-color: #347862; background: #347862; box-shadow: 0 5px 14px rgba(52,120,98,.18); }
+.button.income-button:hover, .income-button:hover { background: #28634f; }
+.button:disabled { cursor: default; opacity: .55; transform: none; box-shadow: none; }
 .icon-btn { width: 39px; height: 39px; padding: 0; border: 1px solid var(--line); border-radius: 10px; color: var(--muted); background: #fff; font-size: 24px; }
 .menu-btn { display: none; }
 
@@ -81,6 +84,14 @@ input:focus, select:focus, textarea:focus { border-color: #3f8d7c; box-shadow: 0
 .summary-card.expense-main-card .label, .summary-card.expense-main-card small { color: rgba(255,255,255,.7); }
 .summary-card.expense-main-card .label i { background: #f7cf91; }
 .summary-card.expense-main-card:after { background: rgba(255,255,255,.08); }
+.summary-card.balance-card { color: #fff; border-color: transparent; background: linear-gradient(135deg, #347862, #245345); }
+.summary-card.balance-card .label, .summary-card.balance-card small { color: rgba(255,255,255,.7); }
+.summary-card.balance-card .label i { background: #f4c76b; }
+.summary-card.balance-card:after { background: rgba(255,255,255,.08); }
+.summary-card.balance-card.loss-card { background: linear-gradient(135deg, #9b574d, #713d37); }
+.summary-card.income-summary-card .label i { background: #347862; }
+.summary-card.expense-summary-card .label i { background: #b66a5e; }
+.summary-card.allowance-summary-card .label i { background: #de9b2a; }
 
 .dashboard-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(300px, .8fr); gap: 18px; }
 .lower-grid { margin-top: 18px; grid-template-columns: 1fr 1fr; }
@@ -114,7 +125,33 @@ input:focus, select:focus, textarea:focus { border-color: #3f8d7c; box-shadow: 0
 .product-sub { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; }
 .expense-toolbar { margin-bottom: 18px; }
 .expense-toolbar .date-range { margin-left: auto; }
+.personal-ledger-actions { display: flex; gap: 8px; }
 .expense-eyebrow { color: #9b574d; }
+.income-eyebrow { color: #347862; }
+.allowance-eyebrow { color: #a86c0d; }
+.personal-income-grid { margin-bottom: 18px; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr); gap: 18px; }
+.allowance-panel { border-color: #eadfca; background: linear-gradient(145deg, #fff, #fffbf3); }
+.allowance-status { padding: 5px 9px; color: #8a6222; background: var(--amber-soft); border-radius: 20px; font-size: 9px; font-weight: 800; }
+.allowance-status.received { color: var(--green); background: var(--green-soft); }
+.allowance-copy { margin: 10px 0 16px; color: var(--muted); font-size: 11px; line-height: 1.7; }
+.allowance-controls { display: grid; grid-template-columns: minmax(160px, 1fr) auto auto; align-items: end; gap: 9px; }
+.allowance-controls .button { white-space: nowrap; }
+.allowance-button { color: #fff; border-color: #c48822; background: #c48822; box-shadow: 0 5px 14px rgba(196,136,34,.18); }
+.allowance-button:hover { background: #a86c0d; }
+.allowance-hint { display: block; margin-top: 10px; color: var(--muted); font-size: 9px; line-height: 1.6; }
+.income-overview-panel { min-width: 0; }
+.income-breakdown .progress i { background: #347862 !important; }
+.income-breakdown .product-row:nth-child(2) .progress i { background: #de9b2a !important; }
+.income-breakdown .product-row:nth-child(3) .progress i { background: #4d7fa7 !important; }
+.income-ledger-panel { margin-bottom: 18px; padding-bottom: 0; overflow: hidden; }
+.income-ledger-head { margin-bottom: 8px; }
+.income-table-wrap { margin: 0 -21px; overflow-x: auto; border-top: 1px solid var(--line); }
+.income-table-wrap th:first-child, .income-table-wrap td:first-child { padding-left: 21px; }
+.income-table-wrap th:last-child, .income-table-wrap td:last-child { padding-right: 21px; }
+.income-amount { color: #347862; font-weight: 800; }
+.pill.income-type { color: #28634f; background: #e8f3ef; }
+.pill.income-type.labor { color: #8a6222; background: var(--amber-soft); }
+.income-help-note { margin-top: 20px; padding: 13px 14px; color: #3f6759; border: 1px solid #cfe1da; border-radius: 11px; background: #f3f9f6; font-size: 11px; line-height: 1.6; }
 .expense-trend-panel { margin-bottom: 18px; }
 .expense-chart-tooltip { background: rgba(100, 54, 48, .96); box-shadow: 0 8px 24px rgba(100, 54, 48, .2); }
 .expense-chart-tooltip strong { color: #f7cf91; }
@@ -304,6 +341,7 @@ tbody tr:hover { background: #fbfdfc; }
   .menu-btn { display: block; }
   .dashboard-grid, .lower-grid { grid-template-columns: 1fr; }
   .expense-overview-grid { grid-template-columns: 1fr; }
+  .personal-income-grid { grid-template-columns: 1fr; }
   .chart-wrap { height: 220px; }
   .settings-card { grid-template-columns: auto 1fr; }
   .settings-card .button { grid-column: 1 / -1; }
@@ -318,6 +356,15 @@ tbody tr:hover { background: #fbfdfc; }
   .button { padding-left: 12px; padding-right: 12px; }
   .dashboard-toolbar { align-items: stretch; flex-direction: column; }
   .expense-toolbar .date-range { margin-left: 0; }
+  .personal-ledger-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .allowance-controls { grid-template-columns: 1fr 1fr; }
+  .allowance-amount-field { grid-column: 1 / -1; }
+  .allowance-controls .button { width: 100%; }
+  .income-ledger-head { align-items: stretch; flex-direction: column; }
+  .income-ledger-head .button { width: 100%; }
+  .income-table-wrap { margin-left: -16px; margin-right: -16px; }
+  .income-table-wrap th:first-child, .income-table-wrap td:first-child { padding-left: 16px; }
+  .income-table-wrap th:last-child, .income-table-wrap td:last-child { padding-right: 16px; }
   .segmented { overflow-x: auto; }
   .segmented button { flex: 1; white-space: nowrap; }
   .date-range { justify-content: space-between; }

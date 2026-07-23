@@ -150,10 +150,48 @@
             <span>至</span>
             <input id="expenseEndDate" type="date" aria-label="支出结束日期">
           </div>
-          <button id="addExpenseBtn" class="button expense-button">＋ 记支出</button>
+          <div class="personal-ledger-actions">
+            <button id="addPersonalIncomeBtn" class="button income-button">＋ 记收入</button>
+            <button id="addExpenseBtn" class="button expense-button">＋ 记支出</button>
+          </div>
         </div>
 
         <div id="expenseSummaryCards" class="summary-grid expense-summary-grid"></div>
+
+        <div class="personal-income-grid">
+          <article class="panel allowance-panel">
+            <div class="panel-head">
+              <div><p class="eyebrow allowance-eyebrow">固定收入</p><h2>每月固定补助</h2></div>
+              <span id="allowanceStatus" class="allowance-status">尚未设置</span>
+            </div>
+            <p class="allowance-copy">设置一次每月金额；实际到账后再确认，避免尚未收到的钱提前计入结余。</p>
+            <div class="allowance-controls">
+              <label class="field money-field allowance-amount-field"><span>每月补助金额</span><div><i>¥</i><input id="monthlyAllowanceAmount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></div></label>
+              <button id="saveAllowanceBtn" class="button ghost">保存金额</button>
+              <button id="confirmAllowanceBtn" class="button allowance-button">确认本月到账</button>
+            </div>
+            <small id="allowanceHint" class="allowance-hint">也可以使用“记收入”补录以前月份的补助。</small>
+          </article>
+
+          <article class="panel income-overview-panel">
+            <div class="panel-head"><div><p class="eyebrow income-eyebrow">收入构成</p><h2>补助与劳务</h2></div></div>
+            <div id="personalIncomeBreakdown" class="product-breakdown income-breakdown"></div>
+          </article>
+        </div>
+
+        <article class="panel income-ledger-panel">
+          <div class="panel-head income-ledger-head">
+            <div><p class="eyebrow income-eyebrow">实际到账</p><h2>个人收入明细</h2></div>
+            <button id="personalIncomeCsvBtn" class="button ghost">导出收入 CSV</button>
+          </div>
+          <div class="income-table-wrap">
+            <table>
+              <thead><tr><th>到账日期</th><th>类型</th><th>归属月份</th><th class="num">金额</th><th>备注</th><th></th></tr></thead>
+              <tbody id="personalIncomeTableBody"></tbody>
+            </table>
+          </div>
+          <div id="personalIncomeEmpty" class="empty-state hidden"></div>
+        </article>
 
         <article class="panel expense-trend-panel">
           <div class="panel-head">
@@ -203,7 +241,7 @@
               <div><p class="eyebrow">多设备同步</p><h2>电脑与手机自动同步</h2></div>
               <span id="cloudStatusBadge" class="sync-badge local">仅本机</span>
             </div>
-            <p class="setting-copy">使用同一邮箱登录后，订单、客户和个人支出会在设备间自动合并。离线时仍可记账，联网后继续同步。</p>
+            <p class="setting-copy">使用同一邮箱登录后，订单、客户、个人收入和支出会在设备间自动合并。离线时仍可记账，联网后继续同步。</p>
             <div class="cloud-config-box">
               <label class="field"><span>Supabase 项目地址</span><input id="cloudUrl" type="url" placeholder="https://xxxxx.supabase.co"></label>
               <label class="field"><span>Publishable / anon key</span><input id="cloudKey" type="password" placeholder="只使用公开密钥，不要填写 service_role"></label>
@@ -231,7 +269,7 @@
         <div class="settings-grid">
           <article class="panel settings-card">
             <div class="setting-icon green">↧</div>
-            <div><h2>备份全部数据</h2><p>导出订单、客户和个人支出为 JSON 文件，换设备也能恢复。</p></div>
+            <div><h2>备份全部数据</h2><p>导出订单、客户、个人收入和支出为 JSON 文件，换设备也能恢复。</p></div>
             <button id="backupBtn" class="button primary">导出备份</button>
           </article>
           <article class="panel settings-card">
@@ -252,7 +290,7 @@
           </article>
           <article class="panel settings-card danger-card">
             <div class="setting-icon red">⌫</div>
-            <div><h2>清空全部数据</h2><p>永久删除本机所有订单和客户。建议先导出备份。</p></div>
+            <div><h2>清空全部数据</h2><p>永久删除本机所有订单、客户和个人账本。建议先导出备份。</p></div>
             <button id="clearDataBtn" class="button danger">清空数据</button>
           </article>
         </div>
@@ -314,6 +352,24 @@
       </div>
       <div class="expense-separation-note">个人支出使用独立账本，不会扣减 GPT 业务利润。</div>
       <div class="drawer-actions"><button type="button" class="button ghost close-drawer">取消</button><button type="submit" class="button expense-button">保存支出</button></div>
+    </form>
+  </aside>
+
+  <aside id="personalIncomeDrawer" class="drawer" aria-hidden="true">
+    <form id="personalIncomeForm" class="drawer-inner">
+      <div class="drawer-head"><div><p class="eyebrow income-eyebrow">个人账本</p><h2 id="personalIncomeDrawerTitle">记一笔个人收入</h2></div><button type="button" class="icon-btn close-drawer">×</button></div>
+      <input id="personalIncomeId" type="hidden">
+      <div class="form-grid">
+        <label class="field money-field full"><span>到账金额 <b>*</b></span><div><i>¥</i><input id="personalIncomeAmount" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0.00" required></div></label>
+        <label class="field"><span>收入类型 <b>*</b></span><select id="personalIncomeType" required><option>补助</option><option>劳务</option><option>其他</option></select></label>
+        <label class="field"><span>实际到账时间 <b>*</b></span><input id="personalIncomeDate" type="datetime-local" required></label>
+        <label class="field"><span>归属开始月份 <b>*</b></span><input id="personalIncomePeriodStart" type="month" required></label>
+        <label class="field"><span>归属结束月份 <b>*</b></span><input id="personalIncomePeriodEnd" type="month" required></label>
+        <label class="field full"><span>收入备注</span><textarea id="personalIncomeNote" rows="4" placeholder="例如：7 月补助、4—6 月劳务费等…"></textarea></label>
+      </div>
+      <div id="personalIncomeHelp" class="income-help-note">补助通常归属一个月；劳务可以选择连续几个月。</div>
+      <div class="expense-separation-note">个人收入只计入个人账本结余，不会混入 GPT 业务收入和利润。</div>
+      <div class="drawer-actions"><button type="button" class="button ghost close-drawer">取消</button><button type="submit" class="button income-button">保存收入</button></div>
     </form>
   </aside>
 

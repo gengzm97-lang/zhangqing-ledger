@@ -3,11 +3,12 @@
 const STORAGE_KEY = "zhangqing_gpt_ledger_v1";
 const PRODUCTS = ["GPT Plus", "5x", "20x"];
 const EXPENSE_CATEGORIES = ["餐饮", "交通", "购物", "住房", "娱乐", "医疗", "学习", "人情往来", "其他"];
+const PERSONAL_INCOME_TYPES = ["补助", "劳务", "其他"];
 const PAGE_META = {
   dashboard: ["经营概览", "今天生意怎么样？"],
   orders: ["收支明细", "每一笔，都清清楚楚"],
   customers: ["客户运营", "了解每一位老客户"],
-  expenses: ["个人账本", "我的钱花到哪里了？"],
+  expenses: ["个人账本", "个人收支，一眼看清"],
   settings: ["安全与备份", "数据由你掌控"]
 };
 
@@ -22,20 +23,35 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
 function emptyState() {
-  return { version: 3, orders: [], customers: [], expenses: [], deleted: { orders: {}, customers: {}, expenses: {} }, updatedAt: new Date().toISOString() };
+  return {
+    version: 4,
+    orders: [],
+    customers: [],
+    expenses: [],
+    personalIncomes: [],
+    allowanceSetting: { amount: 0, updatedAt: "" },
+    deleted: { orders: {}, customers: {}, expenses: {}, personalIncomes: {} },
+    updatedAt: new Date().toISOString()
+  };
 }
 
 function normalizeStateData(data) {
   const base = emptyState();
   return {
-    ...base, ...data, version: 3,
+    ...base, ...data, version: 4,
     orders: Array.isArray(data?.orders) ? data.orders : [],
     customers: Array.isArray(data?.customers) ? data.customers : [],
     expenses: Array.isArray(data?.expenses) ? data.expenses : [],
+    personalIncomes: Array.isArray(data?.personalIncomes) ? data.personalIncomes : [],
+    allowanceSetting: {
+      amount: Math.max(0, Number(data?.allowanceSetting?.amount) || 0),
+      updatedAt: data?.allowanceSetting?.updatedAt || ""
+    },
     deleted: {
       orders: data?.deleted?.orders || {},
       customers: data?.deleted?.customers || {},
-      expenses: data?.deleted?.expenses || {}
+      expenses: data?.deleted?.expenses || {},
+      personalIncomes: data?.deleted?.personalIncomes || {}
     }
   };
 }
@@ -59,7 +75,7 @@ function saveState() {
 }
 
 function markDeleted(collection, id, target = state) {
-  if (!target.deleted) target.deleted = { orders: {}, customers: {}, expenses: {} };
+  if (!target.deleted) target.deleted = { orders: {}, customers: {}, expenses: {}, personalIncomes: {} };
   if (!target.deleted[collection]) target.deleted[collection] = {};
   target.deleted[collection][id] = new Date().toISOString();
 }
@@ -72,7 +88,7 @@ function mergeCloudState(localData, remoteData) {
   const local = normalizeStateData(localData);
   const remote = normalizeStateData(remoteData);
   const merged = emptyState();
-  ["orders", "customers", "expenses"].forEach(collection => {
+  ["orders", "customers", "expenses", "personalIncomes"].forEach(collection => {
     const deleted = { ...remote.deleted[collection] };
     Object.entries(local.deleted[collection]).forEach(([id, time]) => {
       if (!deleted[id] || new Date(time) > new Date(deleted[id])) deleted[id] = time;
@@ -88,6 +104,9 @@ function mergeCloudState(localData, remoteData) {
       return !deletedAt || new Date(deletedAt).getTime() < recordTime(record);
     });
   });
+  merged.allowanceSetting = recordTime(local.allowanceSetting) >= recordTime(remote.allowanceSetting)
+    ? { ...local.allowanceSetting }
+    : { ...remote.allowanceSetting };
   merged.updatedAt = new Date(Math.max(new Date(local.updatedAt).getTime() || 0, new Date(remote.updatedAt).getTime() || 0)).toISOString();
   return merged;
 }
@@ -115,6 +134,22 @@ function parseLocalDate(value) {
 function dateKey(value) {
   const d = parseLocalDate(value);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function monthKey(value = new Date()) {
+  return dateKey(value).slice(0, 7);
+}
+
+function formatMonth(value) {
+  if (!/^\d{4}-\d{2}$/.test(value || "")) return "未标注";
+  const [year, month] = value.split("-").map(Number);
+  return `${year}年${month}月`;
+}
+
+function formatIncomePeriod(income) {
+  const start = income.periodStart || monthKey(income.date);
+  const end = income.periodEnd || start;
+  return start === end ? formatMonth(start) : `${formatMonth(start)}—${formatMonth(end)}`;
 }
 
 function formatDate(value, withTime = false) {
@@ -234,7 +269,7 @@ function setDateRange(range) {
 
 function setExpenseDateRange(range) {
   expenseRange = range;
-  const { start, end } = getRangeDates(range, state.expenses);
+  const { start, end } = getRangeDates(range, [...state.expenses, ...state.personalIncomes]);
   $("#expenseStartDate").value = dateKey(start);
   $("#expenseEndDate").value = dateKey(end);
   $$("#expenseDatePresets button").forEach(btn => btn.classList.toggle("active", btn.dataset.range === range));
@@ -645,21 +680,89 @@ function expenseRangeItems() {
   });
 }
 
+function personalIncomeRangeItems() {
+  const start = parseLocalDate($("#expenseStartDate").value);
+  const end = parseLocalDate($("#expenseEndDate").value);
+  end.setHours(23, 59, 59, 999);
+  return state.personalIncomes.filter(income => {
+    const date = parseLocalDate(income.date);
+    return date >= start && date <= end;
+  });
+}
+
+function allowanceIncomeForMonth(month = monthKey()) {
+  return state.personalIncomes.find(income =>
+    income.type === "补助" &&
+    (income.periodStart || monthKey(income.date)) === month &&
+    (income.periodEnd || income.periodStart || monthKey(income.date)) === month
+  );
+}
+
+function renderPersonalIncomeLedger(rangeIncomes) {
+  const totalIncome = sum(rangeIncomes, income => income.amount);
+  const rows = PERSONAL_INCOME_TYPES.map(type => {
+    const items = rangeIncomes.filter(income => income.type === type);
+    return { type, items, amount: sum(items, income => income.amount) };
+  }).filter(row => row.items.length).sort((a, b) => b.amount - a.amount);
+  const maxAmount = Math.max(1, ...rows.map(row => row.amount));
+  $("#personalIncomeBreakdown").innerHTML = rows.length ? rows.map(row => `<div class="product-row">
+    <div class="product-meta"><span>${escapeHtml(row.type)}<small>${row.items.length} 笔</small></span><strong>${money(row.amount)}</strong></div>
+    <div class="progress"><i style="width:${row.amount / maxAmount * 100}%"></i></div>
+    <div class="product-sub"><span>占个人收入 ${totalIncome ? (row.amount / totalIncome * 100).toFixed(1) : 0}%</span><span>平均 ${money(row.amount / row.items.length)}</span></div>
+  </div>`).join("") : `<div class="empty-state">${emptyMarkup("暂无个人收入", "记录补助或劳务到账后，这里会显示收入构成。", "＋")}</div>`;
+
+  const allowanceAmount = Number(state.allowanceSetting.amount) || 0;
+  const currentMonth = monthKey();
+  const received = allowanceIncomeForMonth(currentMonth);
+  if (document.activeElement !== $("#monthlyAllowanceAmount")) {
+    $("#monthlyAllowanceAmount").value = allowanceAmount || "";
+  }
+  $("#allowanceStatus").textContent = received ? "本月已到账" : allowanceAmount ? "本月待确认" : "尚未设置";
+  $("#allowanceStatus").classList.toggle("received", Boolean(received));
+  $("#confirmAllowanceBtn").disabled = Boolean(received);
+  $("#confirmAllowanceBtn").textContent = received ? "本月已到账" : "确认本月到账";
+  $("#allowanceHint").textContent = received
+    ? `${formatMonth(currentMonth)}已记录 ${money(received.amount)}，到账日 ${formatDate(received.date)}。`
+    : allowanceAmount
+      ? `确认后会按 ${money(allowanceAmount)} 记入${formatMonth(currentMonth)}。`
+      : "先填写每月固定金额并保存；也可以使用“记收入”补录以前月份。";
+
+  const sorted = [...rangeIncomes].sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date));
+  $("#personalIncomeTableBody").innerHTML = sorted.map(income => `<tr>
+    <td>${formatDate(income.date)}</td>
+    <td><span class="pill income-type ${income.type === "劳务" ? "labor" : ""}">${escapeHtml(income.type || "其他")}</span></td>
+    <td>${escapeHtml(formatIncomePeriod(income))}</td>
+    <td class="num income-amount">＋${money(income.amount)}</td>
+    <td class="note-cell" title="${escapeHtml(income.note || "")}">${escapeHtml(income.note || "—")}</td>
+    <td><div class="row-actions"><button data-edit-personal-income="${income.id}">编辑</button><button class="delete" data-delete-personal-income="${income.id}">删除</button></div></td>
+  </tr>`).join("");
+  $("#personalIncomeEmpty").classList.toggle("hidden", sorted.length > 0);
+  $("#personalIncomeEmpty").innerHTML = emptyMarkup(
+    state.personalIncomes.length ? "所选时间内没有个人收入" : "还没有个人收入",
+    state.personalIncomes.length ? "可以调整上方日期范围查看其他到账记录。" : "设置固定补助，或点击“记收入”记录补助和劳务。",
+    "＋"
+  );
+}
+
 function renderExpenses() {
   const rangeExpenses = expenseRangeItems();
+  const rangeIncomes = personalIncomeRangeItems();
   const total = sum(rangeExpenses, expense => expense.amount);
-  const todayKey = dateKey(new Date());
-  const todayTotal = sum(state.expenses.filter(expense => dateKey(expense.date) === todayKey), expense => expense.amount);
+  const totalIncome = sum(rangeIncomes, income => income.amount);
+  const balance = totalIncome - total;
   const uniqueDays = new Set(rangeExpenses.map(expense => dateKey(expense.date))).size;
-  const average = rangeExpenses.length ? total / rangeExpenses.length : 0;
+  const allowanceTotal = sum(rangeIncomes.filter(income => income.type === "补助"), income => income.amount);
+  const laborTotal = sum(rangeIncomes.filter(income => income.type === "劳务"), income => income.amount);
+  const allowanceAmount = Number(state.allowanceSetting.amount) || 0;
   const cards = [
-    ["期间总支出", money(total, true), `${uniqueDays} 个消费日`, "expense-main-card"],
-    ["今日支出", money(todayTotal, true), `${state.expenses.filter(expense => dateKey(expense.date) === todayKey).length} 笔`, ""],
-    ["支出笔数", `${rangeExpenses.length} 笔`, `覆盖 ${uniqueDays} 天`, ""],
-    ["平均每笔", money(average, true), "仅统计所选时间", ""]
+    ["期间结余", money(balance, true), `收入 ${money(totalIncome, true)} · 支出 ${money(total, true)}`, `balance-card ${balance < 0 ? "loss-card" : ""}`],
+    ["个人收入", money(totalIncome, true), `补助 ${money(allowanceTotal, true)} · 劳务 ${money(laborTotal, true)}`, "income-summary-card"],
+    ["个人支出", money(total, true), `${rangeExpenses.length} 笔 · ${uniqueDays} 个消费日`, "expense-summary-card"],
+    ["固定补助", allowanceAmount ? `${money(allowanceAmount, true)}/月` : "未设置", allowanceIncomeForMonth() ? "本月已确认到账" : "本月尚未确认", "allowance-summary-card"]
   ];
   $("#expenseSummaryCards").innerHTML = cards.map(([label, value, note, cls]) => `
     <article class="summary-card ${cls}"><div class="label"><i></i>${label}</div><strong>${value}</strong><small>${note}</small></article>`).join("");
+  renderPersonalIncomeLedger(rangeIncomes);
   renderExpenseTrendChart(rangeExpenses);
 
   const categoryRows = EXPENSE_CATEGORIES.map(category => {
@@ -698,6 +801,101 @@ function renderExpenses() {
   </tr>`).join("");
   $("#expensesEmpty").classList.toggle("hidden", filtered.length > 0);
   $("#expensesEmpty").innerHTML = emptyMarkup(state.expenses.length ? "没有匹配的支出" : "还没有个人支出", state.expenses.length ? "试试清除搜索词或调整日期、分类。" : "点击“记支出”，开始记录日常消费。", "¥");
+}
+
+function updatePersonalIncomePeriodForm() {
+  const type = $("#personalIncomeType").value;
+  const start = $("#personalIncomePeriodStart").value;
+  const endInput = $("#personalIncomePeriodEnd");
+  endInput.min = start || "";
+  if (start && (type === "补助" || !endInput.value || endInput.value < start)) endInput.value = start;
+  $("#personalIncomeHelp").textContent = type === "劳务"
+    ? "劳务按实际到账日计入结余；归属月份可以选择连续几个月。"
+    : type === "补助"
+      ? "补助通常归属一个月；补记以前月份时选择对应月份即可。"
+      : "其他收入也可以标注它实际归属的月份。";
+}
+
+function openPersonalIncomeDrawer(income = null, presetType = "补助") {
+  $("#personalIncomeForm").reset();
+  const period = monthKey();
+  $("#personalIncomeId").value = income?.id || "";
+  $("#personalIncomeDrawerTitle").textContent = income ? "编辑个人收入" : "记一笔个人收入";
+  $("#personalIncomeAmount").value = income?.amount ?? "";
+  $("#personalIncomeType").value = income?.type || presetType;
+  $("#personalIncomeDate").value = income ? toLocalInput(parseLocalDate(income.date)) : toLocalInput();
+  $("#personalIncomePeriodStart").value = income?.periodStart || (income ? monthKey(income.date) : period);
+  $("#personalIncomePeriodEnd").value = income?.periodEnd || income?.periodStart || (income ? monthKey(income.date) : period);
+  $("#personalIncomeNote").value = income?.note || "";
+  updatePersonalIncomePeriodForm();
+  openDrawer("#personalIncomeDrawer");
+  setTimeout(() => $("#personalIncomeAmount").focus(), 280);
+}
+
+function savePersonalIncome(event) {
+  event.preventDefault();
+  const amount = Number($("#personalIncomeAmount").value);
+  const periodStart = $("#personalIncomePeriodStart").value;
+  const periodEnd = $("#personalIncomePeriodEnd").value;
+  if (!Number.isFinite(amount) || amount <= 0) return showToast("请输入正确的到账金额");
+  if (!periodStart || !periodEnd) return showToast("请选择收入归属月份");
+  if (periodEnd < periodStart) return showToast("结束月份不能早于开始月份");
+  const id = $("#personalIncomeId").value;
+  const income = {
+    id: id || uid("income"),
+    amount,
+    type: $("#personalIncomeType").value,
+    date: $("#personalIncomeDate").value,
+    periodStart,
+    periodEnd,
+    note: $("#personalIncomeNote").value.trim(),
+    updatedAt: new Date().toISOString()
+  };
+  if (id) state.personalIncomes[state.personalIncomes.findIndex(item => item.id === id)] = income;
+  else state.personalIncomes.push(income);
+  saveState();
+  closeDrawers();
+  renderExpenses();
+  showToast(id ? "个人收入已更新" : "个人收入已记入账本");
+}
+
+function deletePersonalIncome(id) {
+  askConfirm("删除这笔个人收入？", "删除后个人结余和收入统计会同步更新。此操作无法撤销。", () => {
+    markDeleted("personalIncomes", id);
+    state.personalIncomes = state.personalIncomes.filter(income => income.id !== id);
+    saveState();
+    renderExpenses();
+    showToast("个人收入已删除");
+  });
+}
+
+function saveAllowanceSetting() {
+  const amount = Number($("#monthlyAllowanceAmount").value);
+  if (!Number.isFinite(amount) || amount < 0) return showToast("请输入正确的每月补助金额");
+  state.allowanceSetting = { amount, updatedAt: new Date().toISOString() };
+  saveState();
+  renderExpenses();
+  showToast(amount ? "每月固定补助已保存" : "每月固定补助已清除");
+}
+
+function confirmMonthlyAllowance() {
+  const amount = Number(state.allowanceSetting.amount) || 0;
+  if (amount <= 0) return showToast("请先设置每月固定补助金额");
+  const period = monthKey();
+  if (allowanceIncomeForMonth(period)) return showToast("本月补助已经确认到账");
+  state.personalIncomes.push({
+    id: `allowance_${period}`,
+    amount,
+    type: "补助",
+    date: toLocalInput(),
+    periodStart: period,
+    periodEnd: period,
+    note: `${formatMonth(period)}固定补助`,
+    updatedAt: new Date().toISOString()
+  });
+  saveState();
+  renderExpenses();
+  showToast("本月补助已记为到账");
 }
 
 function openExpenseDrawer(expense = null) {
@@ -945,6 +1143,21 @@ function exportExpensesCsv() {
   showToast("个人支出明细已导出");
 }
 
+function exportPersonalIncomesCsv() {
+  const headers = ["到账日期", "收入类型", "归属开始月份", "归属结束月份", "金额", "备注"];
+  const rows = [...state.personalIncomes].sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date)).map(income => [
+    income.date,
+    income.type,
+    income.periodStart || monthKey(income.date),
+    income.periodEnd || income.periodStart || monthKey(income.date),
+    income.amount,
+    income.note || ""
+  ]);
+  const csv = [headers, ...rows].map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\r\n");
+  downloadFile(`账清-个人收入-${dateKey(new Date())}.csv`, `\ufeff${csv}`, "text/csv;charset=utf-8");
+  showToast("个人收入明细已导出");
+}
+
 function backupData(silent = false) {
   downloadFile(`账清-完整备份-${dateKey(new Date())}.json`, JSON.stringify(state, null, 2), "application/json");
   if (!silent) showToast("完整备份已导出");
@@ -954,7 +1167,7 @@ async function restoreData(file) {
   try {
     const data = JSON.parse(await file.text());
     if (!data || !Array.isArray(data.orders) || !Array.isArray(data.customers)) throw new Error("格式错误");
-    if (state.orders.length || state.customers.length || state.expenses.length) backupData(true);
+    if (state.orders.length || state.customers.length || state.expenses.length || state.personalIncomes.length) backupData(true);
     state = normalizeStateData(data);
     saveState(); renderAll(); showToast("备份恢复成功");
   } catch (error) { showToast("无法导入：请选择正确的账清备份文件"); }
@@ -968,6 +1181,7 @@ function initEvents() {
   $("#quickOrderBtn").addEventListener("click", () => activePage === "expenses" ? openExpenseDrawer() : openOrderDrawer());
   $("#quickCustomerBtn").addEventListener("click", () => openCustomerDrawer());
   $("#addCustomerBtn").addEventListener("click", () => openCustomerDrawer());
+  $("#addPersonalIncomeBtn").addEventListener("click", () => openPersonalIncomeDrawer());
   $("#addExpenseBtn").addEventListener("click", () => openExpenseDrawer());
   $("#inlineAddCustomer").addEventListener("click", () => { const name = $("#orderCustomer").value; closeDrawers(); openCustomerDrawer(name ? { name } : null); });
   $$(".close-drawer").forEach(btn => btn.addEventListener("click", closeDrawers));
@@ -975,6 +1189,11 @@ function initEvents() {
   $("#orderForm").addEventListener("submit", saveOrder);
   $("#customerForm").addEventListener("submit", saveCustomer);
   $("#expenseForm").addEventListener("submit", saveExpense);
+  $("#personalIncomeForm").addEventListener("submit", savePersonalIncome);
+  $("#personalIncomeType").addEventListener("change", updatePersonalIncomePeriodForm);
+  $("#personalIncomePeriodStart").addEventListener("change", updatePersonalIncomePeriodForm);
+  $("#saveAllowanceBtn").addEventListener("click", saveAllowanceSetting);
+  $("#confirmAllowanceBtn").addEventListener("click", confirmMonthlyAllowance);
   $("#orderRevenue").addEventListener("input", updateProfitPreview);
   $("#orderCost").addEventListener("input", updateProfitPreview);
   $("#orderCustomer").addEventListener("input", () => {
@@ -1011,6 +1230,12 @@ function initEvents() {
     if (edit) openExpenseDrawer(state.expenses.find(expense => expense.id === edit.dataset.editExpense));
     if (del) deleteExpense(del.dataset.deleteExpense);
   });
+  $("#personalIncomeTableBody").addEventListener("click", event => {
+    const edit = event.target.closest("[data-edit-personal-income]");
+    const del = event.target.closest("[data-delete-personal-income]");
+    if (edit) openPersonalIncomeDrawer(state.personalIncomes.find(income => income.id === edit.dataset.editPersonalIncome));
+    if (del) deletePersonalIncome(del.dataset.deletePersonalIncome);
+  });
   $("#profileContent").addEventListener("click", event => {
     const edit = event.target.closest("[data-edit-customer]"); const del = event.target.closest("[data-delete-customer]");
     if (edit) openCustomerDrawer(state.customers.find(c => c.id === edit.dataset.editCustomer));
@@ -1020,14 +1245,16 @@ function initEvents() {
   $("#settingsCsvBtn").addEventListener("click", exportCsv);
   $("#expenseCsvBtn").addEventListener("click", exportExpensesCsv);
   $("#settingsExpenseCsvBtn").addEventListener("click", exportExpensesCsv);
+  $("#personalIncomeCsvBtn").addEventListener("click", exportPersonalIncomesCsv);
   $("#backupBtn").addEventListener("click", () => backupData());
   $("#restoreBtn").addEventListener("click", () => $("#restoreInput").click());
   $("#restoreInput").addEventListener("change", event => event.target.files[0] && restoreData(event.target.files[0]));
-  $("#clearDataBtn").addEventListener("click", () => askConfirm("清空全部数据？", "所有订单、客户和个人支出都会永久删除。请确认已经完成备份。", () => {
+  $("#clearDataBtn").addEventListener("click", () => askConfirm("清空全部数据？", "所有订单、客户、个人收入和支出都会永久删除。请确认已经完成备份。", () => {
     const cleared = emptyState();
     state.orders.forEach(item => markDeleted("orders", item.id, cleared));
     state.customers.forEach(item => markDeleted("customers", item.id, cleared));
     state.expenses.forEach(item => markDeleted("expenses", item.id, cleared));
+    state.personalIncomes.forEach(item => markDeleted("personalIncomes", item.id, cleared));
     state = cleared; saveState(); renderAll(); showToast("全部数据已清空");
   }, "确认清空"));
   $("#confirmCancel").addEventListener("click", () => { $("#confirmModal").classList.add("hidden"); confirmAction = null; });
