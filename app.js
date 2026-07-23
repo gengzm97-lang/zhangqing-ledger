@@ -395,6 +395,153 @@ function hideTrendTooltip() {
   $("#trendChart").style.cursor = "default";
 }
 
+function renderExpenseTrendChart(expenses) {
+  const canvas = $("#expenseTrendChart");
+  const tooltip = $("#expenseChartTooltip");
+  tooltip.classList.add("hidden");
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  const width = rect.width, height = rect.height;
+  const pad = { left: 47, right: 12, top: 17, bottom: 28 };
+  const chartW = width - pad.left - pad.right, chartH = height - pad.top - pad.bottom;
+  const start = parseLocalDate($("#expenseStartDate").value);
+  const end = parseLocalDate($("#expenseEndDate").value);
+  start.setHours(0, 0, 0, 0);
+  end.setHours(0, 0, 0, 0);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) return;
+
+  const grouped = new Map();
+  expenses.forEach(expense => {
+    const key = dateKey(expense.date);
+    const point = grouped.get(key) || { amount: 0, count: 0 };
+    point.amount += Number(expense.amount) || 0;
+    point.count += 1;
+    grouped.set(key, point);
+  });
+
+  const points = [];
+  const cursor = new Date(start);
+  while (cursor <= end) {
+    const key = dateKey(cursor);
+    const saved = grouped.get(key) || { amount: 0, count: 0 };
+    points.push({
+      key,
+      label: `${cursor.getMonth() + 1}/${cursor.getDate()}`,
+      fullLabel: `${cursor.getFullYear()}年${cursor.getMonth() + 1}月${cursor.getDate()}日`,
+      amount: saved.amount,
+      count: saved.count
+    });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  const maxVal = Math.max(1, ...points.map(point => point.amount));
+  const x = index => pad.left + (points.length === 1 ? chartW / 2 : index / (points.length - 1) * chartW);
+  const y = value => pad.top + (maxVal - value) / maxVal * chartH;
+  ctx.clearRect(0, 0, width, height);
+  ctx.font = "10px Microsoft YaHei";
+  ctx.strokeStyle = "#eee7e5";
+  ctx.fillStyle = "#938783";
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const value = maxVal - maxVal * i / 4;
+    const yy = pad.top + chartH * i / 4;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, yy);
+    ctx.lineTo(width - pad.right, yy);
+    ctx.stroke();
+    const axisLabel = value >= 10000 ? `${(value / 10000).toFixed(1)}万` : maxVal <= 5 ? value.toFixed(1).replace(/\.0$/, "") : Math.round(value);
+    ctx.textAlign = "right";
+    ctx.fillText(axisLabel, pad.left - 8, yy + 3);
+  }
+
+  ctx.beginPath();
+  points.forEach((point, index) => index ? ctx.lineTo(x(index), y(point.amount)) : ctx.moveTo(x(index), y(point.amount)));
+  if (points.length > 1) {
+    ctx.lineTo(x(points.length - 1), y(0));
+    ctx.lineTo(x(0), y(0));
+    ctx.closePath();
+    const gradient = ctx.createLinearGradient(0, pad.top, 0, height - pad.bottom);
+    gradient.addColorStop(0, "rgba(182,106,94,.22)");
+    gradient.addColorStop(1, "rgba(182,106,94,0)");
+    ctx.fillStyle = gradient;
+    ctx.fill();
+  }
+
+  ctx.beginPath();
+  points.forEach((point, index) => index ? ctx.lineTo(x(index), y(point.amount)) : ctx.moveTo(x(index), y(point.amount)));
+  ctx.strokeStyle = "#9b574d";
+  ctx.lineWidth = 2.2;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.stroke();
+  points.forEach((point, index) => {
+    if (!point.count) return;
+    ctx.beginPath();
+    ctx.arc(x(index), y(point.amount), points.length > 90 ? 2 : 3, 0, Math.PI * 2);
+    ctx.fillStyle = "#fff";
+    ctx.fill();
+    ctx.strokeStyle = "#9b574d";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  });
+
+  ctx.fillStyle = "#938783";
+  ctx.textAlign = "center";
+  const labelStep = Math.max(1, Math.ceil(points.length / 7));
+  points.forEach((point, index) => {
+    if (index % labelStep === 0 || index === points.length - 1) ctx.fillText(point.label, x(index), height - 8);
+  });
+  canvas._expenseChartData = {
+    points,
+    xPositions: points.map((_, index) => x(index)),
+    yPositions: points.map(point => y(point.amount)),
+    width
+  };
+}
+
+function showExpenseTrendTooltip(event) {
+  const canvas = $("#expenseTrendChart");
+  const data = canvas._expenseChartData;
+  const tooltip = $("#expenseChartTooltip");
+  if (!data?.points?.length) return;
+  const rect = canvas.getBoundingClientRect();
+  const pointerX = event.clientX - rect.left;
+  let index = 0;
+  let distance = Infinity;
+  data.xPositions.forEach((position, pointIndex) => {
+    const current = Math.abs(position - pointerX);
+    if (current < distance) {
+      distance = current;
+      index = pointIndex;
+    }
+  });
+  const spacing = data.xPositions.length > 1 ? Math.abs(data.xPositions[1] - data.xPositions[0]) : 80;
+  if (distance > Math.max(18, Math.min(42, spacing / 2))) {
+    tooltip.classList.add("hidden");
+    canvas.style.cursor = "default";
+    return;
+  }
+  const point = data.points[index];
+  tooltip.innerHTML = `<strong>${escapeHtml(point.fullLabel)}</strong><span>当日支出<b>${money(point.amount)}</b></span><span>支出笔数<b>${point.count} 笔</b></span>`;
+  tooltip.classList.remove("hidden");
+  const half = tooltip.offsetWidth / 2;
+  const left = Math.max(half + 5, Math.min(data.width - half - 5, data.xPositions[index]));
+  const above = data.yPositions[index] - tooltip.offsetHeight - 12;
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${above > 3 ? above : data.yPositions[index] + 12}px`;
+  canvas.style.cursor = "pointer";
+}
+
+function hideExpenseTrendTooltip() {
+  $("#expenseChartTooltip").classList.add("hidden");
+  $("#expenseTrendChart").style.cursor = "default";
+}
+
 function renderRecentOrders() {
   const orders = [...state.orders].sort((a, b) => parseLocalDate(b.date) - parseLocalDate(a.date)).slice(0, 5);
   $("#recentOrders").innerHTML = orders.length ? orders.map(o => `<div class="compact-item">
@@ -513,6 +660,7 @@ function renderExpenses() {
   ];
   $("#expenseSummaryCards").innerHTML = cards.map(([label, value, note, cls]) => `
     <article class="summary-card ${cls}"><div class="label"><i></i>${label}</div><strong>${value}</strong><small>${note}</small></article>`).join("");
+  renderExpenseTrendChart(rangeExpenses);
 
   const categoryRows = EXPENSE_CATEGORIES.map(category => {
     const items = rangeExpenses.filter(expense => expense.category === category);
@@ -836,6 +984,9 @@ function initEvents() {
   $("#trendChart").addEventListener("mousemove", showTrendTooltip);
   $("#trendChart").addEventListener("mouseleave", hideTrendTooltip);
   $("#trendChart").addEventListener("click", showTrendTooltip);
+  $("#expenseTrendChart").addEventListener("mousemove", showExpenseTrendTooltip);
+  $("#expenseTrendChart").addEventListener("mouseleave", hideExpenseTrendTooltip);
+  $("#expenseTrendChart").addEventListener("click", showExpenseTrendTooltip);
   $$("#datePresets button").forEach(btn => btn.addEventListener("click", () => setDateRange(btn.dataset.range)));
   $("#startDate").addEventListener("change", () => { currentRange = "custom"; $$("#datePresets button").forEach(b => b.classList.remove("active")); renderDashboard(); });
   $("#endDate").addEventListener("change", () => { currentRange = "custom"; $$("#datePresets button").forEach(b => b.classList.remove("active")); renderDashboard(); });
@@ -882,7 +1033,13 @@ function initEvents() {
   $("#confirmCancel").addEventListener("click", () => { $("#confirmModal").classList.add("hidden"); confirmAction = null; });
   $("#confirmOk").addEventListener("click", () => { const action = confirmAction; $("#confirmModal").classList.add("hidden"); confirmAction = null; if (action) action(); });
   document.addEventListener("keydown", event => { if (event.key === "Escape") { closeDrawers(); $("#confirmModal").classList.add("hidden"); } });
-  window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => renderTrendChart(dashboardOrders()), 120); });
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      if (activePage === "dashboard") renderTrendChart(dashboardOrders());
+      if (activePage === "expenses") renderExpenseTrendChart(expenseRangeItems());
+    }, 120);
+  });
 }
 
 function init() {

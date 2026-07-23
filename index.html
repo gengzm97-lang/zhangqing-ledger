@@ -155,6 +155,17 @@
 
         <div id="expenseSummaryCards" class="summary-grid expense-summary-grid"></div>
 
+        <article class="panel expense-trend-panel">
+          <div class="panel-head">
+            <div><p class="eyebrow expense-eyebrow">每日消费</p><h2>每日支出走势</h2></div>
+            <div class="legend"><span><i class="expense"></i>支出</span></div>
+          </div>
+          <div class="chart-wrap expense-chart-wrap">
+            <canvas id="expenseTrendChart" aria-label="每日支出趋势图"></canvas>
+            <div id="expenseChartTooltip" class="chart-tooltip expense-chart-tooltip hidden"></div>
+          </div>
+        </article>
+
         <div class="dashboard-grid expense-overview-grid">
           <article class="panel">
             <div class="panel-head"><div><p class="eyebrow expense-eyebrow">支出去向</p><h2>分类支出</h2></div></div>
