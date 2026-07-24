@@ -92,6 +92,7 @@ input:focus, select:focus, textarea:focus { border-color: #3f8d7c; box-shadow: 0
 .summary-card.income-summary-card .label i { background: #347862; }
 .summary-card.expense-summary-card .label i { background: #b66a5e; }
 .summary-card.allowance-summary-card .label i { background: #de9b2a; }
+.summary-card.business-summary-card .label i { background: #6b6faf; }
 
 .dashboard-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(300px, .8fr); gap: 18px; }
 .lower-grid { margin-top: 18px; grid-template-columns: 1fr 1fr; }
@@ -105,6 +106,8 @@ input:focus, select:focus, textarea:focus { border-color: #3f8d7c; box-shadow: 0
 .legend .revenue { background: #a9b7b2; }
 .legend .profit { background: var(--green); }
 .legend .expense { background: #b66a5e; }
+.legend .business-income { background: #4d7fa7; }
+.legend .operating-profit { background: #6b6faf; }
 .legend .personal-income { background: #347862; }
 .legend .balance { background: #de9b2a; }
 .chart-wrap { height: 244px; margin-top: 15px; position: relative; }
@@ -165,6 +168,8 @@ input:focus, select:focus, textarea:focus { border-color: #3f8d7c; box-shadow: 0
 .monthly-table-wrap { margin: 14px -21px 0; overflow-x: auto; border-top: 1px solid var(--line); }
 .monthly-table-wrap th:first-child, .monthly-table-wrap td:first-child { padding-left: 21px; }
 .monthly-table-wrap th:last-child, .monthly-table-wrap td:last-child { padding-right: 21px; }
+.business-income-amount { color: #3778ad; font-weight: 800; }
+.business-profit-amount { color: #6b6faf; font-weight: 800; }
 .expense-trend-panel { margin-bottom: 18px; }
 .expense-chart-tooltip { background: rgba(100, 54, 48, .96); box-shadow: 0 8px 24px rgba(100, 54, 48, .2); }
 .expense-chart-tooltip strong { color: #f7cf91; }

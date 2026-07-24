@@ -9,7 +9,7 @@ const PAGE_META = {
   orders: ["收支明细", "每一笔，都清清楚楚"],
   customers: ["客户运营", "了解每一位老客户"],
   expenses: ["个人账本", "个人收支，一眼看清"],
-  monthly: ["月度收支", "每个月收了多少、花了多少？"],
+  monthly: ["月度收支", "每个月收了多少、花了多少、赚了多少？"],
   settings: ["安全与备份", "数据由你掌控"]
 };
 
@@ -581,7 +581,7 @@ function hideExpenseTrendTooltip() {
 
 function monthlyAvailableYears() {
   const years = new Set([new Date().getFullYear()]);
-  [...state.personalIncomes, ...state.expenses].forEach(item => {
+  [...state.orders, ...state.personalIncomes, ...state.expenses].forEach(item => {
     const date = parseLocalDate(item.date);
     if (!Number.isNaN(date.getTime())) years.add(date.getFullYear());
   });
@@ -598,6 +598,9 @@ function monthlyCashflowPoints(yearValue = monthlyYear) {
       key,
       label: `${monthIndex + 1}月`,
       fullLabel: `${year}年${monthIndex + 1}月`,
+      businessRevenue: 0,
+      businessProfit: 0,
+      businessOrderCount: 0,
       income: 0,
       subsidy: 0,
       labor: 0,
@@ -605,6 +608,7 @@ function monthlyCashflowPoints(yearValue = monthlyYear) {
       incomeCount: 0,
       expense: 0,
       expenseCount: 0,
+      personalBalance: 0,
       balance: 0
     };
   });
@@ -625,7 +629,17 @@ function monthlyCashflowPoints(yearValue = monthlyYear) {
     point.expense += Number(expense.amount) || 0;
     point.expenseCount += 1;
   });
-  points.forEach(point => point.balance = point.income - point.expense);
+  state.orders.forEach(order => {
+    const point = byKey.get(monthKey(order.date));
+    if (!point) return;
+    point.businessRevenue += Number(order.revenue) || 0;
+    point.businessProfit += Number(order.profit ?? (order.revenue - order.cost)) || 0;
+    point.businessOrderCount += 1;
+  });
+  points.forEach(point => {
+    point.personalBalance = point.income - point.expense;
+    point.balance = point.businessProfit + point.personalBalance;
+  });
   return points;
 }
 
@@ -637,20 +651,24 @@ function renderMonthlyReport() {
   const points = monthlyCashflowPoints();
   const totalIncome = sum(points, point => point.income);
   const totalExpense = sum(points, point => point.expense);
-  const balance = totalIncome - totalExpense;
+  const totalBusinessRevenue = sum(points, point => point.businessRevenue);
+  const totalBusinessProfit = sum(points, point => point.businessProfit);
+  const personalBalance = totalIncome - totalExpense;
+  const balance = totalBusinessProfit + personalBalance;
   const subsidy = sum(points, point => point.subsidy);
   const labor = sum(points, point => point.labor);
-  const activeMonths = points.filter(point => point.incomeCount || point.expenseCount).length;
   const cards = [
-    ["年度结余", money(balance, true), `收入 ${money(totalIncome, true)} · 支出 ${money(totalExpense, true)}`, `balance-card ${balance < 0 ? "loss-card" : ""}`],
-    ["年度收入", money(totalIncome, true), `补助 ${money(subsidy, true)} · 劳务 ${money(labor, true)}`, "income-summary-card"],
-    ["年度支出", money(totalExpense, true), `${sum(points, point => point.expenseCount)} 笔个人支出`, "expense-summary-card"],
-    ["有记录月份", `${activeMonths} 个月`, `当前显示 ${monthlyYear} 年`, "allowance-summary-card"]
+    ["综合结余", money(balance, true), `经营利润 ${money(totalBusinessProfit, true)} · 个人结余 ${money(personalBalance, true)}`, `balance-card ${balance < 0 ? "loss-card" : ""}`],
+    ["经营利润", money(totalBusinessProfit, true), `经营收入 ${money(totalBusinessRevenue, true)} · ${sum(points, point => point.businessOrderCount)} 笔订单`, "business-summary-card"],
+    ["个人收入", money(totalIncome, true), `补助 ${money(subsidy, true)} · 劳务 ${money(labor, true)}`, "income-summary-card"],
+    ["个人支出", money(totalExpense, true), `${sum(points, point => point.expenseCount)} 笔个人支出`, "expense-summary-card"]
   ];
   $("#monthlySummaryCards").innerHTML = cards.map(([label, value, note, cls]) => `
     <article class="summary-card ${cls}"><div class="label"><i></i>${label}</div><strong>${value}</strong><small>${note}</small></article>`).join("");
   $("#monthlyCashflowTableBody").innerHTML = [...points].reverse().map(point => `<tr>
     <td><strong>${escapeHtml(point.fullLabel)}</strong></td>
+    <td class="num business-income-amount">${money(point.businessRevenue)}</td>
+    <td class="num business-profit-amount">${money(point.businessProfit)}</td>
     <td class="num income-amount">${money(point.income)}</td>
     <td class="num">${money(point.subsidy)}</td>
     <td class="num">${money(point.labor)}</td>
@@ -674,8 +692,8 @@ function renderMonthlyCashflowChart(points) {
   const width = rect.width, height = rect.height;
   const pad = { left: 51, right: 13, top: 18, bottom: 30 };
   const chartW = width - pad.left - pad.right, chartH = height - pad.top - pad.bottom;
-  const maxVal = Math.max(1, ...points.flatMap(point => [point.income, point.expense, point.balance]));
-  const minVal = Math.min(0, ...points.map(point => point.balance));
+  const maxVal = Math.max(1, ...points.flatMap(point => [point.businessRevenue, point.businessProfit, point.income, point.expense, point.balance]));
+  const minVal = Math.min(0, ...points.flatMap(point => [point.businessProfit, point.balance]));
   const range = maxVal - minVal || 1;
   const x = index => pad.left + (points.length === 1 ? chartW / 2 : index / (points.length - 1) * chartW);
   const y = value => pad.top + (maxVal - value) / range * chartH;
@@ -704,15 +722,18 @@ function renderMonthlyCashflowChart(points) {
     ctx.stroke();
   }
 
-  const barWidth = Math.max(3, Math.min(13, chartW / Math.max(1, points.length * 3)));
+  const barWidth = Math.max(2, Math.min(9, chartW / Math.max(1, points.length * 5)));
+  const drawBar = (center, offset, value, color) => {
+    const valueY = y(value);
+    ctx.fillStyle = color;
+    ctx.fillRect(center + offset, Math.min(zeroY, valueY), barWidth, Math.abs(zeroY - valueY));
+  };
   points.forEach((point, index) => {
     const center = x(index);
-    const incomeY = y(point.income);
-    const expenseY = y(point.expense);
-    ctx.fillStyle = "#347862";
-    ctx.fillRect(center - barWidth - 1, incomeY, barWidth, Math.max(0, zeroY - incomeY));
-    ctx.fillStyle = "#b66a5e";
-    ctx.fillRect(center + 1, expenseY, barWidth, Math.max(0, zeroY - expenseY));
+    drawBar(center, -barWidth * 2 - 2, point.businessRevenue, "#4d7fa7");
+    drawBar(center, -barWidth - 1, point.businessProfit, "#6b6faf");
+    drawBar(center, 1, point.income, "#347862");
+    drawBar(center, barWidth + 2, point.expense, "#b66a5e");
   });
 
   ctx.beginPath();
@@ -769,7 +790,7 @@ function showMonthlyChartTooltip(event) {
     return;
   }
   const point = data.points[index];
-  tooltip.innerHTML = `<strong>${escapeHtml(point.fullLabel)}</strong><span>个人收入<b>${money(point.income)}</b></span><span>个人支出<b>${money(point.expense)}</b></span><span>当月结余<b>${money(point.balance)}</b></span><span>记录笔数<b>${point.incomeCount} 收入 · ${point.expenseCount} 支出</b></span>`;
+  tooltip.innerHTML = `<strong>${escapeHtml(point.fullLabel)}</strong><span>经营收入<b>${money(point.businessRevenue)}</b></span><span>经营利润<b>${money(point.businessProfit)}</b></span><span>个人收入<b>${money(point.income)}</b></span><span>个人支出<b>${money(point.expense)}</b></span><span>综合结余<b>${money(point.balance)}</b></span><span>记录笔数<b>${point.businessOrderCount} 订单 · ${point.incomeCount} 收入 · ${point.expenseCount} 支出</b></span>`;
   tooltip.classList.remove("hidden");
   const half = tooltip.offsetWidth / 2;
   const left = Math.max(half + 5, Math.min(data.width - half - 5, data.xPositions[index]));

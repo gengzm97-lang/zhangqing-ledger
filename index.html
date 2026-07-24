@@ -238,7 +238,7 @@
       <section id="monthlyPage" class="page">
         <div class="toolbar filter-bar monthly-toolbar">
           <label class="monthly-year-field"><span>查看年度</span><select id="monthlyYearFilter" aria-label="选择月度收支年份"></select></label>
-          <p class="monthly-note">个人收入按实际到账月、支出按实际发生月汇总；GPT 业务利润保持独立。</p>
+          <p class="monthly-note">经营收入按订单月份汇总；综合结余＝经营利润＋个人收入－个人支出。</p>
           <button class="button ghost" data-goto="expenses">去个人账本记账</button>
         </div>
 
@@ -246,11 +246,13 @@
 
         <article class="panel monthly-chart-panel">
           <div class="panel-head">
-            <div><p class="eyebrow">按月合并</p><h2>每月收入、支出与结余</h2></div>
+            <div><p class="eyebrow">按月合并</p><h2>经营、个人收支与综合结余</h2></div>
             <div class="legend">
-              <span><i class="personal-income"></i>收入</span>
-              <span><i class="expense"></i>支出</span>
-              <span><i class="balance"></i>结余</span>
+              <span><i class="business-income"></i>经营收入</span>
+              <span><i class="operating-profit"></i>经营利润</span>
+              <span><i class="personal-income"></i>个人收入</span>
+              <span><i class="expense"></i>个人支出</span>
+              <span><i class="balance"></i>综合结余</span>
             </div>
           </div>
           <div class="chart-wrap monthly-chart-wrap">
@@ -263,7 +265,7 @@
           <div class="panel-head"><div><p class="eyebrow">逐月核对</p><h2>月度收支明细</h2></div></div>
           <div class="monthly-table-wrap">
             <table>
-              <thead><tr><th>月份</th><th class="num">收入</th><th class="num">补助</th><th class="num">劳务</th><th class="num">支出</th><th class="num">结余</th></tr></thead>
+              <thead><tr><th>月份</th><th class="num">经营收入</th><th class="num">经营利润</th><th class="num">个人收入</th><th class="num">补助</th><th class="num">劳务</th><th class="num">个人支出</th><th class="num">综合结余</th></tr></thead>
               <tbody id="monthlyCashflowTableBody"></tbody>
             </table>
           </div>
