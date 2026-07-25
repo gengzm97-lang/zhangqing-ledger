@@ -8,8 +8,7 @@ const PAGE_META = {
   dashboard: ["经营概览", "今天生意怎么样？"],
   orders: ["收支明细", "每一笔，都清清楚楚"],
   customers: ["客户运营", "了解每一位老客户"],
-  expenses: ["个人账本", "个人收支，一眼看清"],
-  monthly: ["月度收支", "每个月收了多少、花了多少、赚了多少？"],
+  expenses: ["个人账本", "每天与每月的收入、支出和结余"],
   settings: ["安全与备份", "数据由你掌控"]
 };
 
@@ -432,7 +431,7 @@ function hideTrendTooltip() {
   $("#trendChart").style.cursor = "default";
 }
 
-function renderExpenseTrendChart(expenses) {
+function renderExpenseTrendChart(expenses, incomes) {
   const canvas = $("#expenseTrendChart");
   const tooltip = $("#expenseChartTooltip");
   tooltip.classList.add("hidden");
@@ -455,9 +454,16 @@ function renderExpenseTrendChart(expenses) {
   const grouped = new Map();
   expenses.forEach(expense => {
     const key = dateKey(expense.date);
-    const point = grouped.get(key) || { amount: 0, count: 0 };
-    point.amount += Number(expense.amount) || 0;
-    point.count += 1;
+    const point = grouped.get(key) || { income: 0, incomeCount: 0, expense: 0, expenseCount: 0 };
+    point.expense += Number(expense.amount) || 0;
+    point.expenseCount += 1;
+    grouped.set(key, point);
+  });
+  incomes.forEach(income => {
+    const key = dateKey(income.date);
+    const point = grouped.get(key) || { income: 0, incomeCount: 0, expense: 0, expenseCount: 0 };
+    point.income += Number(income.amount) || 0;
+    point.incomeCount += 1;
     grouped.set(key, point);
   });
 
@@ -465,27 +471,33 @@ function renderExpenseTrendChart(expenses) {
   const cursor = new Date(start);
   while (cursor <= end) {
     const key = dateKey(cursor);
-    const saved = grouped.get(key) || { amount: 0, count: 0 };
+    const saved = grouped.get(key) || { income: 0, incomeCount: 0, expense: 0, expenseCount: 0 };
     points.push({
       key,
       label: `${cursor.getMonth() + 1}/${cursor.getDate()}`,
       fullLabel: `${cursor.getFullYear()}年${cursor.getMonth() + 1}月${cursor.getDate()}日`,
-      amount: saved.amount,
-      count: saved.count
+      income: saved.income,
+      incomeCount: saved.incomeCount,
+      expense: saved.expense,
+      expenseCount: saved.expenseCount,
+      balance: saved.income - saved.expense
     });
     cursor.setDate(cursor.getDate() + 1);
   }
 
-  const maxVal = Math.max(1, ...points.map(point => point.amount));
+  const maxVal = Math.max(1, ...points.flatMap(point => [point.income, point.expense, point.balance]));
+  const minVal = Math.min(0, ...points.map(point => point.balance));
+  const range = maxVal - minVal || 1;
   const x = index => pad.left + (points.length === 1 ? chartW / 2 : index / (points.length - 1) * chartW);
-  const y = value => pad.top + (maxVal - value) / maxVal * chartH;
+  const y = value => pad.top + (maxVal - value) / range * chartH;
+  const zeroY = y(0);
   ctx.clearRect(0, 0, width, height);
   ctx.font = "10px Microsoft YaHei";
   ctx.strokeStyle = "#eee7e5";
   ctx.fillStyle = "#938783";
   ctx.lineWidth = 1;
   for (let i = 0; i <= 4; i++) {
-    const value = maxVal - maxVal * i / 4;
+    const value = maxVal - range * i / 4;
     const yy = pad.top + chartH * i / 4;
     ctx.beginPath();
     ctx.moveTo(pad.left, yy);
@@ -495,34 +507,40 @@ function renderExpenseTrendChart(expenses) {
     ctx.textAlign = "right";
     ctx.fillText(axisLabel, pad.left - 8, yy + 3);
   }
-
-  ctx.beginPath();
-  points.forEach((point, index) => index ? ctx.lineTo(x(index), y(point.amount)) : ctx.moveTo(x(index), y(point.amount)));
-  if (points.length > 1) {
-    ctx.lineTo(x(points.length - 1), y(0));
-    ctx.lineTo(x(0), y(0));
-    ctx.closePath();
-    const gradient = ctx.createLinearGradient(0, pad.top, 0, height - pad.bottom);
-    gradient.addColorStop(0, "rgba(182,106,94,.22)");
-    gradient.addColorStop(1, "rgba(182,106,94,0)");
-    ctx.fillStyle = gradient;
-    ctx.fill();
+  if (minVal < 0) {
+    ctx.strokeStyle = "#c7d0cc";
+    ctx.beginPath();
+    ctx.moveTo(pad.left, zeroY);
+    ctx.lineTo(width - pad.right, zeroY);
+    ctx.stroke();
   }
 
+  const barWidth = Math.max(1, Math.min(8, chartW / Math.max(1, points.length * 3)));
+  const drawBar = (center, offset, value, color) => {
+    const valueY = y(value);
+    ctx.fillStyle = color;
+    ctx.fillRect(center + offset, Math.min(zeroY, valueY), barWidth, Math.abs(zeroY - valueY));
+  };
+  points.forEach((point, index) => {
+    const center = x(index);
+    drawBar(center, -barWidth - 1, point.income, "#347862");
+    drawBar(center, 1, point.expense, "#b66a5e");
+  });
+
   ctx.beginPath();
-  points.forEach((point, index) => index ? ctx.lineTo(x(index), y(point.amount)) : ctx.moveTo(x(index), y(point.amount)));
-  ctx.strokeStyle = "#9b574d";
+  points.forEach((point, index) => index ? ctx.lineTo(x(index), y(point.balance)) : ctx.moveTo(x(index), y(point.balance)));
+  ctx.strokeStyle = "#c48822";
   ctx.lineWidth = 2.2;
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
   ctx.stroke();
   points.forEach((point, index) => {
-    if (!point.count) return;
+    if (!point.incomeCount && !point.expenseCount) return;
     ctx.beginPath();
-    ctx.arc(x(index), y(point.amount), points.length > 90 ? 2 : 3, 0, Math.PI * 2);
+    ctx.arc(x(index), y(point.balance), points.length > 90 ? 2 : 3, 0, Math.PI * 2);
     ctx.fillStyle = "#fff";
     ctx.fill();
-    ctx.strokeStyle = "#9b574d";
+    ctx.strokeStyle = "#c48822";
     ctx.lineWidth = 2;
     ctx.stroke();
   });
@@ -536,7 +554,7 @@ function renderExpenseTrendChart(expenses) {
   canvas._expenseChartData = {
     points,
     xPositions: points.map((_, index) => x(index)),
-    yPositions: points.map(point => y(point.amount)),
+    yPositions: points.map(point => y(point.balance)),
     width
   };
 }
@@ -564,7 +582,7 @@ function showExpenseTrendTooltip(event) {
     return;
   }
   const point = data.points[index];
-  tooltip.innerHTML = `<strong>${escapeHtml(point.fullLabel)}</strong><span>当日支出<b>${money(point.amount)}</b></span><span>支出笔数<b>${point.count} 笔</b></span>`;
+  tooltip.innerHTML = `<strong>${escapeHtml(point.fullLabel)}</strong><span>当日收入<b>${money(point.income)}</b></span><span>当日支出<b>${money(point.expense)}</b></span><span>当日结余<b>${money(point.balance)}</b></span><span>记录笔数<b>${point.incomeCount} 收入 · ${point.expenseCount} 支出</b></span>`;
   tooltip.classList.remove("hidden");
   const half = tooltip.offsetWidth / 2;
   const left = Math.max(half + 5, Math.min(data.width - half - 5, data.xPositions[index]));
@@ -987,7 +1005,7 @@ function renderExpenses() {
   $("#expenseSummaryCards").innerHTML = cards.map(([label, value, note, cls]) => `
     <article class="summary-card ${cls}"><div class="label"><i></i>${label}</div><strong>${value}</strong><small>${note}</small></article>`).join("");
   renderPersonalIncomeLedger(rangeIncomes);
-  renderExpenseTrendChart(rangeExpenses);
+  renderExpenseTrendChart(rangeExpenses, rangeIncomes);
 
   const categoryRows = EXPENSE_CATEGORIES.map(category => {
     const items = rangeExpenses.filter(expense => expense.category === category);
@@ -1025,6 +1043,7 @@ function renderExpenses() {
   </tr>`).join("");
   $("#expensesEmpty").classList.toggle("hidden", filtered.length > 0);
   $("#expensesEmpty").innerHTML = emptyMarkup(state.expenses.length ? "没有匹配的支出" : "还没有个人支出", state.expenses.length ? "试试清除搜索词或调整日期、分类。" : "点击“记支出”，开始记录日常消费。", "¥");
+  renderMonthlyReport();
 }
 
 function updatePersonalIncomePeriodForm() {
@@ -1169,7 +1188,6 @@ function renderAll() {
   renderOrders();
   renderCustomers();
   renderExpenses();
-  renderMonthlyReport();
 }
 
 function renderCustomerOptions() {
@@ -1182,15 +1200,14 @@ function switchPage(page) {
   $$(".nav-item").forEach(item => item.classList.toggle("active", item.dataset.page === page));
   $("#eyebrow").textContent = PAGE_META[page][0];
   $("#pageTitle").textContent = PAGE_META[page][1];
-  $("#quickCustomerBtn").classList.toggle("hidden", page === "expenses" || page === "monthly" || page === "settings");
-  $("#quickOrderBtn").classList.toggle("hidden", page === "monthly" || page === "settings");
+  $("#quickCustomerBtn").classList.toggle("hidden", page === "expenses" || page === "settings");
+  $("#quickOrderBtn").classList.toggle("hidden", page === "settings");
   $("#quickOrderBtn").textContent = page === "expenses" ? "＋ 记支出" : "＋ 记一笔";
   $(".sidebar").classList.remove("open");
   if (page === "dashboard") setTimeout(() => renderTrendChart(dashboardOrders()), 30);
   if (page === "orders") renderOrders();
   if (page === "customers") renderCustomers();
   if (page === "expenses") renderExpenses();
-  if (page === "monthly") renderMonthlyReport();
 }
 
 function openDrawer(id) {
@@ -1497,8 +1514,10 @@ function initEvents() {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
       if (activePage === "dashboard") renderTrendChart(dashboardOrders());
-      if (activePage === "expenses") renderExpenseTrendChart(expenseRangeItems());
-      if (activePage === "monthly") renderMonthlyCashflowChart(monthlyCashflowPoints());
+      if (activePage === "expenses") {
+        renderExpenseTrendChart(expenseRangeItems(), personalIncomeRangeItems());
+        renderMonthlyCashflowChart(monthlyCashflowPoints());
+      }
     }, 120);
   });
 }

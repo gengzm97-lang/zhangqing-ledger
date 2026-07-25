@@ -26,7 +26,6 @@
         <button class="nav-item" data-page="orders"><span>▤</span>订单流水</button>
         <button class="nav-item" data-page="customers"><span>◎</span>客户管理</button>
         <button class="nav-item" data-page="expenses"><span>¥</span>个人账本</button>
-        <button class="nav-item" data-page="monthly"><span>▥</span>月度收支</button>
         <button class="nav-item" data-page="settings"><span>⚙</span>数据管理</button>
       </nav>
       <div class="sidebar-foot">
@@ -196,11 +195,15 @@
 
         <article class="panel expense-trend-panel">
           <div class="panel-head">
-            <div><p class="eyebrow expense-eyebrow">每日消费</p><h2>每日支出走势</h2></div>
-            <div class="legend"><span><i class="expense"></i>支出</span></div>
+            <div><p class="eyebrow expense-eyebrow">每日收支</p><h2>每日收入、支出与结余</h2></div>
+            <div class="legend">
+              <span><i class="personal-income"></i>收入</span>
+              <span><i class="expense"></i>支出</span>
+              <span><i class="balance"></i>结余</span>
+            </div>
           </div>
           <div class="chart-wrap expense-chart-wrap">
-            <canvas id="expenseTrendChart" aria-label="每日支出趋势图"></canvas>
+            <canvas id="expenseTrendChart" aria-label="每日收入、支出与结余趋势图"></canvas>
             <div id="expenseChartTooltip" class="chart-tooltip expense-chart-tooltip hidden"></div>
           </div>
         </article>
@@ -233,13 +236,16 @@
           </div>
           <div id="expensesEmpty" class="empty-state hidden"></div>
         </div>
-      </section>
 
-      <section id="monthlyPage" class="page">
+        <div id="monthlyOverview" class="personal-monthly-section">
+          <div class="personal-monthly-heading">
+            <p class="eyebrow">长期总览</p>
+            <h2>月度收支</h2>
+            <p>按月查看经营利润、个人收入、个人支出与综合结余。</p>
+          </div>
         <div class="toolbar filter-bar monthly-toolbar">
           <label class="monthly-year-field"><span>查看年度</span><select id="monthlyYearFilter" aria-label="选择月度收支年份"></select></label>
           <p class="monthly-note">经营利润按订单月份汇总；综合结余＝经营利润＋个人收入－个人支出。</p>
-          <button class="button ghost" data-goto="expenses">去个人账本记账</button>
         </div>
 
         <div id="monthlySummaryCards" class="summary-grid"></div>
@@ -269,6 +275,7 @@
             </table>
           </div>
         </article>
+        </div>
       </section>
 
       <section id="settingsPage" class="page">
