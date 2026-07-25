@@ -3,7 +3,7 @@
 const STORAGE_KEY = "zhangqing_gpt_ledger_v1";
 const PRODUCTS = ["GPT Plus", "5x", "20x"];
 const EXPENSE_CATEGORIES = ["餐饮", "交通", "购物", "住房", "娱乐", "医疗", "学习", "人情往来", "其他"];
-const PERSONAL_INCOME_TYPES = ["补助", "劳务", "其他"];
+const PERSONAL_INCOME_TYPES = ["补助", "劳务", "经营收入"];
 const PAGE_META = {
   dashboard: ["经营概览", "今天生意怎么样？"],
   orders: ["收支明细", "每一笔，都清清楚楚"],
@@ -43,7 +43,9 @@ function normalizeStateData(data) {
     orders: Array.isArray(data?.orders) ? data.orders : [],
     customers: Array.isArray(data?.customers) ? data.customers : [],
     expenses: Array.isArray(data?.expenses) ? data.expenses : [],
-    personalIncomes: Array.isArray(data?.personalIncomes) ? data.personalIncomes : [],
+    personalIncomes: Array.isArray(data?.personalIncomes)
+      ? data.personalIncomes.map(income => ({ ...income, type: income.type === "其他" ? "劳务" : income.type }))
+      : [],
     allowanceSetting: {
       amount: Math.max(0, Number(data?.allowanceSetting?.amount) || 0),
       updatedAt: data?.allowanceSetting?.updatedAt || ""
@@ -431,7 +433,7 @@ function hideTrendTooltip() {
   $("#trendChart").style.cursor = "default";
 }
 
-function renderExpenseTrendChart(expenses, incomes) {
+function renderExpenseTrendChart(expenses, incomes, orders) {
   const canvas = $("#expenseTrendChart");
   const tooltip = $("#expenseChartTooltip");
   tooltip.classList.add("hidden");
@@ -454,16 +456,28 @@ function renderExpenseTrendChart(expenses, incomes) {
   const grouped = new Map();
   expenses.forEach(expense => {
     const key = dateKey(expense.date);
-    const point = grouped.get(key) || { income: 0, incomeCount: 0, expense: 0, expenseCount: 0 };
+    const point = grouped.get(key) || { income: 0, subsidy: 0, labor: 0, businessIncome: 0, incomeCount: 0, businessOrderCount: 0, expense: 0, expenseCount: 0 };
     point.expense += Number(expense.amount) || 0;
     point.expenseCount += 1;
     grouped.set(key, point);
   });
   incomes.forEach(income => {
     const key = dateKey(income.date);
-    const point = grouped.get(key) || { income: 0, incomeCount: 0, expense: 0, expenseCount: 0 };
-    point.income += Number(income.amount) || 0;
+    const point = grouped.get(key) || { income: 0, subsidy: 0, labor: 0, businessIncome: 0, incomeCount: 0, businessOrderCount: 0, expense: 0, expenseCount: 0 };
+    const amount = Number(income.amount) || 0;
+    point.income += amount;
+    if (income.type === "补助") point.subsidy += amount;
+    else point.labor += amount;
     point.incomeCount += 1;
+    grouped.set(key, point);
+  });
+  orders.forEach(order => {
+    const key = dateKey(order.date);
+    const point = grouped.get(key) || { income: 0, subsidy: 0, labor: 0, businessIncome: 0, incomeCount: 0, businessOrderCount: 0, expense: 0, expenseCount: 0 };
+    const amount = orderProfitAmount(order);
+    point.income += amount;
+    point.businessIncome += amount;
+    point.businessOrderCount += 1;
     grouped.set(key, point);
   });
 
@@ -471,13 +485,17 @@ function renderExpenseTrendChart(expenses, incomes) {
   const cursor = new Date(start);
   while (cursor <= end) {
     const key = dateKey(cursor);
-    const saved = grouped.get(key) || { income: 0, incomeCount: 0, expense: 0, expenseCount: 0 };
+    const saved = grouped.get(key) || { income: 0, subsidy: 0, labor: 0, businessIncome: 0, incomeCount: 0, businessOrderCount: 0, expense: 0, expenseCount: 0 };
     points.push({
       key,
       label: `${cursor.getMonth() + 1}/${cursor.getDate()}`,
       fullLabel: `${cursor.getFullYear()}年${cursor.getMonth() + 1}月${cursor.getDate()}日`,
       income: saved.income,
+      subsidy: saved.subsidy,
+      labor: saved.labor,
+      businessIncome: saved.businessIncome,
       incomeCount: saved.incomeCount,
+      businessOrderCount: saved.businessOrderCount,
       expense: saved.expense,
       expenseCount: saved.expenseCount,
       balance: saved.income - saved.expense
@@ -535,7 +553,7 @@ function renderExpenseTrendChart(expenses, incomes) {
   ctx.lineCap = "round";
   ctx.stroke();
   points.forEach((point, index) => {
-    if (!point.incomeCount && !point.expenseCount) return;
+    if (!point.incomeCount && !point.businessOrderCount && !point.expenseCount) return;
     ctx.beginPath();
     ctx.arc(x(index), y(point.balance), points.length > 90 ? 2 : 3, 0, Math.PI * 2);
     ctx.fillStyle = "#fff";
@@ -582,7 +600,7 @@ function showExpenseTrendTooltip(event) {
     return;
   }
   const point = data.points[index];
-  tooltip.innerHTML = `<strong>${escapeHtml(point.fullLabel)}</strong><span>当日收入<b>${money(point.income)}</b></span><span>当日支出<b>${money(point.expense)}</b></span><span>当日结余<b>${money(point.balance)}</b></span><span>记录笔数<b>${point.incomeCount} 收入 · ${point.expenseCount} 支出</b></span>`;
+  tooltip.innerHTML = `<strong>${escapeHtml(point.fullLabel)}</strong><span>当日收入<b>${money(point.income)}</b></span><span>经营收入<b>${money(point.businessIncome)}</b></span><span>补助<b>${money(point.subsidy)}</b></span><span>劳务<b>${money(point.labor)}</b></span><span>当日支出<b>${money(point.expense)}</b></span><span>当日结余<b>${money(point.balance)}</b></span><span>记录笔数<b>${point.businessOrderCount} 订单 · ${point.incomeCount} 到账 · ${point.expenseCount} 支出</b></span>`;
   tooltip.classList.remove("hidden");
   const half = tooltip.offsetWidth / 2;
   const left = Math.max(half + 5, Math.min(data.width - half - 5, data.xPositions[index]));
@@ -621,11 +639,9 @@ function monthlyCashflowPoints(yearValue = monthlyYear) {
       income: 0,
       subsidy: 0,
       labor: 0,
-      otherIncome: 0,
       incomeCount: 0,
       expense: 0,
       expenseCount: 0,
-      personalBalance: 0,
       balance: 0
     };
   });
@@ -637,8 +653,7 @@ function monthlyCashflowPoints(yearValue = monthlyYear) {
     point.income += amount;
     point.incomeCount += 1;
     if (income.type === "补助") point.subsidy += amount;
-    else if (income.type === "劳务") point.labor += amount;
-    else point.otherIncome += amount;
+    else point.labor += amount;
   });
   state.expenses.forEach(expense => {
     const point = byKey.get(monthKey(expense.date));
@@ -649,12 +664,12 @@ function monthlyCashflowPoints(yearValue = monthlyYear) {
   state.orders.forEach(order => {
     const point = byKey.get(monthKey(order.date));
     if (!point) return;
-    point.businessProfit += Number(order.profit ?? (order.revenue - order.cost)) || 0;
+    point.businessProfit += orderProfitAmount(order);
     point.businessOrderCount += 1;
   });
   points.forEach(point => {
-    point.personalBalance = point.income - point.expense;
-    point.balance = point.businessProfit + point.personalBalance;
+    point.income += point.businessProfit;
+    point.balance = point.income - point.expense;
   });
   return points;
 }
@@ -669,14 +684,13 @@ function renderMonthlyReport() {
   const totalExpense = sum(points, point => point.expense);
   const totalBusinessProfit = sum(points, point => point.businessProfit);
   const businessOrderCount = sum(points, point => point.businessOrderCount);
-  const personalBalance = totalIncome - totalExpense;
-  const balance = totalBusinessProfit + personalBalance;
+  const balance = totalIncome - totalExpense;
   const subsidy = sum(points, point => point.subsidy);
   const labor = sum(points, point => point.labor);
   const cards = [
-    ["综合结余", money(balance, true), `经营利润 ${money(totalBusinessProfit, true)} · 个人结余 ${money(personalBalance, true)}`, `balance-card ${balance < 0 ? "loss-card" : ""}`],
+    ["综合结余", money(balance, true), `个人收入 ${money(totalIncome, true)} · 个人支出 ${money(totalExpense, true)}`, `balance-card ${balance < 0 ? "loss-card" : ""}`],
     ["经营利润", money(totalBusinessProfit, true), `${businessOrderCount} 笔订单 · 平均每单 ${money(businessOrderCount ? totalBusinessProfit / businessOrderCount : 0, true)}`, "business-summary-card"],
-    ["个人收入", money(totalIncome, true), `补助 ${money(subsidy, true)} · 劳务 ${money(labor, true)}`, "income-summary-card"],
+    ["个人收入", money(totalIncome, true), `经营收入 ${money(totalBusinessProfit, true)} · 补助 ${money(subsidy, true)} · 劳务 ${money(labor, true)}`, "income-summary-card"],
     ["个人支出", money(totalExpense, true), `${sum(points, point => point.expenseCount)} 笔个人支出`, "expense-summary-card"]
   ];
   $("#monthlySummaryCards").innerHTML = cards.map(([label, value, note, cls]) => `
@@ -708,7 +722,7 @@ function renderMonthlyCashflowChart(points) {
   const pad = { left: 51, right: 13, top: 18, bottom: 30 };
   const chartW = width - pad.left - pad.right, chartH = height - pad.top - pad.bottom;
   const maxVal = Math.max(1, ...points.flatMap(point => [point.businessProfit, point.income, point.expense, point.balance]));
-  const minVal = Math.min(0, ...points.flatMap(point => [point.businessProfit, point.balance]));
+  const minVal = Math.min(0, ...points.flatMap(point => [point.businessProfit, point.income, point.balance]));
   const range = maxVal - minVal || 1;
   const x = index => pad.left + (points.length === 1 ? chartW / 2 : index / (points.length - 1) * chartW);
   const y = value => pad.top + (maxVal - value) / range * chartH;
@@ -804,7 +818,7 @@ function showMonthlyChartTooltip(event) {
     return;
   }
   const point = data.points[index];
-  tooltip.innerHTML = `<strong>${escapeHtml(point.fullLabel)}</strong><span>经营利润<b>${money(point.businessProfit)}</b></span><span>个人收入<b>${money(point.income)}</b></span><span>个人支出<b>${money(point.expense)}</b></span><span>综合结余<b>${money(point.balance)}</b></span><span>记录笔数<b>${point.businessOrderCount} 订单 · ${point.incomeCount} 收入 · ${point.expenseCount} 支出</b></span>`;
+  tooltip.innerHTML = `<strong>${escapeHtml(point.fullLabel)}</strong><span>经营收入<b>${money(point.businessProfit)}</b></span><span>补助<b>${money(point.subsidy)}</b></span><span>劳务<b>${money(point.labor)}</b></span><span>个人收入<b>${money(point.income)}</b></span><span>个人支出<b>${money(point.expense)}</b></span><span>综合结余<b>${money(point.balance)}</b></span><span>记录笔数<b>${point.businessOrderCount} 订单 · ${point.incomeCount} 到账 · ${point.expenseCount} 支出</b></span>`;
   tooltip.classList.remove("hidden");
   const half = tooltip.offsetWidth / 2;
   const left = Math.max(half + 5, Math.min(data.width - half - 5, data.xPositions[index]));
@@ -932,6 +946,20 @@ function personalIncomeRangeItems() {
   });
 }
 
+function personalBusinessIncomeRangeItems() {
+  const start = parseLocalDate($("#expenseStartDate").value);
+  const end = parseLocalDate($("#expenseEndDate").value);
+  end.setHours(23, 59, 59, 999);
+  return state.orders.filter(order => {
+    const date = parseLocalDate(order.date);
+    return date >= start && date <= end;
+  });
+}
+
+function orderProfitAmount(order) {
+  return Number(order.profit ?? (Number(order.revenue) - Number(order.cost))) || 0;
+}
+
 function allowanceIncomeForMonth(month = monthKey()) {
   return state.personalIncomes.find(income =>
     income.type === "补助" &&
@@ -940,18 +968,22 @@ function allowanceIncomeForMonth(month = monthKey()) {
   );
 }
 
-function renderPersonalIncomeLedger(rangeIncomes) {
-  const totalIncome = sum(rangeIncomes, income => income.amount);
+function renderPersonalIncomeLedger(rangeIncomes, rangeOrders) {
+  const businessIncome = sum(rangeOrders, orderProfitAmount);
+  const totalIncome = businessIncome + sum(rangeIncomes, income => income.amount);
   const rows = PERSONAL_INCOME_TYPES.map(type => {
+    if (type === "经营收入") {
+      return { type, items: rangeOrders, amount: businessIncome };
+    }
     const items = rangeIncomes.filter(income => income.type === type);
     return { type, items, amount: sum(items, income => income.amount) };
-  }).filter(row => row.items.length).sort((a, b) => b.amount - a.amount);
-  const maxAmount = Math.max(1, ...rows.map(row => row.amount));
-  $("#personalIncomeBreakdown").innerHTML = rows.length ? rows.map(row => `<div class="product-row">
+  }).filter(row => row.items.length);
+  const maxAmount = Math.max(1, ...rows.map(row => Math.abs(row.amount)));
+  $("#personalIncomeBreakdown").innerHTML = rows.length ? rows.map(row => `<div class="product-row ${row.amount < 0 ? "loss" : ""}">
     <div class="product-meta"><span>${escapeHtml(row.type)}<small>${row.items.length} 笔</small></span><strong>${money(row.amount)}</strong></div>
-    <div class="progress"><i style="width:${row.amount / maxAmount * 100}%"></i></div>
+    <div class="progress"><i style="width:${Math.abs(row.amount) / maxAmount * 100}%"></i></div>
     <div class="product-sub"><span>占个人收入 ${totalIncome ? (row.amount / totalIncome * 100).toFixed(1) : 0}%</span><span>平均 ${money(row.amount / row.items.length)}</span></div>
-  </div>`).join("") : `<div class="empty-state">${emptyMarkup("暂无个人收入", "记录补助或劳务到账后，这里会显示收入构成。", "＋")}</div>`;
+  </div>`).join("") : `<div class="empty-state">${emptyMarkup("暂无个人收入", "订单产生利润或记录补助、劳务到账后，这里会显示收入构成。", "＋")}</div>`;
 
   const allowanceAmount = Number(state.allowanceSetting.amount) || 0;
   const currentMonth = monthKey();
@@ -989,8 +1021,10 @@ function renderPersonalIncomeLedger(rangeIncomes) {
 function renderExpenses() {
   const rangeExpenses = expenseRangeItems();
   const rangeIncomes = personalIncomeRangeItems();
+  const rangeOrders = personalBusinessIncomeRangeItems();
   const total = sum(rangeExpenses, expense => expense.amount);
-  const totalIncome = sum(rangeIncomes, income => income.amount);
+  const businessIncome = sum(rangeOrders, orderProfitAmount);
+  const totalIncome = businessIncome + sum(rangeIncomes, income => income.amount);
   const balance = totalIncome - total;
   const uniqueDays = new Set(rangeExpenses.map(expense => dateKey(expense.date))).size;
   const allowanceTotal = sum(rangeIncomes.filter(income => income.type === "补助"), income => income.amount);
@@ -998,14 +1032,14 @@ function renderExpenses() {
   const allowanceAmount = Number(state.allowanceSetting.amount) || 0;
   const cards = [
     ["期间结余", money(balance, true), `收入 ${money(totalIncome, true)} · 支出 ${money(total, true)}`, `balance-card ${balance < 0 ? "loss-card" : ""}`],
-    ["个人收入", money(totalIncome, true), `补助 ${money(allowanceTotal, true)} · 劳务 ${money(laborTotal, true)}`, "income-summary-card"],
+    ["个人收入", money(totalIncome, true), `经营收入 ${money(businessIncome, true)} · 补助 ${money(allowanceTotal, true)} · 劳务 ${money(laborTotal, true)}`, "income-summary-card"],
     ["个人支出", money(total, true), `${rangeExpenses.length} 笔 · ${uniqueDays} 个消费日`, "expense-summary-card"],
     ["固定补助", allowanceAmount ? `${money(allowanceAmount, true)}/月` : "未设置", allowanceIncomeForMonth() ? "本月已确认到账" : "本月尚未确认", "allowance-summary-card"]
   ];
   $("#expenseSummaryCards").innerHTML = cards.map(([label, value, note, cls]) => `
     <article class="summary-card ${cls}"><div class="label"><i></i>${label}</div><strong>${value}</strong><small>${note}</small></article>`).join("");
-  renderPersonalIncomeLedger(rangeIncomes);
-  renderExpenseTrendChart(rangeExpenses, rangeIncomes);
+  renderPersonalIncomeLedger(rangeIncomes, rangeOrders);
+  renderExpenseTrendChart(rangeExpenses, rangeIncomes, rangeOrders);
 
   const categoryRows = EXPENSE_CATEGORIES.map(category => {
     const items = rangeExpenses.filter(expense => expense.category === category);
@@ -1515,7 +1549,7 @@ function initEvents() {
     resizeTimer = setTimeout(() => {
       if (activePage === "dashboard") renderTrendChart(dashboardOrders());
       if (activePage === "expenses") {
-        renderExpenseTrendChart(expenseRangeItems(), personalIncomeRangeItems());
+        renderExpenseTrendChart(expenseRangeItems(), personalIncomeRangeItems(), personalBusinessIncomeRangeItems());
         renderMonthlyCashflowChart(monthlyCashflowPoints());
       }
     }, 120);

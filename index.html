@@ -174,15 +174,15 @@
           </article>
 
           <article class="panel income-overview-panel">
-            <div class="panel-head"><div><p class="eyebrow income-eyebrow">收入构成</p><h2>补助与劳务</h2></div></div>
+            <div class="panel-head"><div><p class="eyebrow income-eyebrow">收入构成</p><h2>补助、劳务与经营收入</h2></div></div>
             <div id="personalIncomeBreakdown" class="product-breakdown income-breakdown"></div>
           </article>
         </div>
 
         <article class="panel income-ledger-panel">
           <div class="panel-head income-ledger-head">
-            <div><p class="eyebrow income-eyebrow">实际到账</p><h2>个人收入明细</h2></div>
-            <button id="personalIncomeCsvBtn" class="button ghost">导出收入 CSV</button>
+            <div><p class="eyebrow income-eyebrow">实际到账</p><h2>补助与劳务到账明细</h2></div>
+            <button id="personalIncomeCsvBtn" class="button ghost">导出到账 CSV</button>
           </div>
           <div class="income-table-wrap">
             <table>
@@ -245,7 +245,7 @@
           </div>
         <div class="toolbar filter-bar monthly-toolbar">
           <label class="monthly-year-field"><span>查看年度</span><select id="monthlyYearFilter" aria-label="选择月度收支年份"></select></label>
-          <p class="monthly-note">经营利润按订单月份汇总；综合结余＝经营利润＋个人收入－个人支出。</p>
+          <p class="monthly-note">个人收入＝经营收入（订单利润）＋补助＋劳务；综合结余＝个人收入－个人支出。</p>
         </div>
 
         <div id="monthlySummaryCards" class="summary-grid"></div>
@@ -270,7 +270,7 @@
           <div class="panel-head"><div><p class="eyebrow">逐月核对</p><h2>月度收支明细</h2></div></div>
           <div class="monthly-table-wrap">
             <table>
-              <thead><tr><th>月份</th><th class="num">经营利润</th><th class="num">个人收入</th><th class="num">补助</th><th class="num">劳务</th><th class="num">个人支出</th><th class="num">综合结余</th></tr></thead>
+              <thead><tr><th>月份</th><th class="num">经营收入</th><th class="num">个人收入</th><th class="num">补助</th><th class="num">劳务</th><th class="num">个人支出</th><th class="num">综合结余</th></tr></thead>
               <tbody id="monthlyCashflowTableBody"></tbody>
             </table>
           </div>
@@ -405,14 +405,14 @@
       <input id="personalIncomeId" type="hidden">
       <div class="form-grid">
         <label class="field money-field full"><span>到账金额 <b>*</b></span><div><i>¥</i><input id="personalIncomeAmount" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0.00" required></div></label>
-        <label class="field"><span>收入类型 <b>*</b></span><select id="personalIncomeType" required><option>补助</option><option>劳务</option><option>其他</option></select></label>
+        <label class="field"><span>收入类型 <b>*</b></span><select id="personalIncomeType" required><option>补助</option><option>劳务</option></select></label>
         <label class="field"><span>实际到账时间 <b>*</b></span><input id="personalIncomeDate" type="datetime-local" required></label>
         <label class="field"><span>归属开始月份 <b>*</b></span><input id="personalIncomePeriodStart" type="month" required></label>
         <label class="field"><span>归属结束月份 <b>*</b></span><input id="personalIncomePeriodEnd" type="month" required></label>
         <label class="field full"><span>收入备注</span><textarea id="personalIncomeNote" rows="4" placeholder="例如：7 月补助、4—6 月劳务费等…"></textarea></label>
       </div>
       <div id="personalIncomeHelp" class="income-help-note">补助通常归属一个月；劳务可以选择连续几个月。</div>
-      <div class="expense-separation-note">个人收入只计入个人账本结余，不会混入 GPT 业务收入和利润。</div>
+      <div class="expense-separation-note">经营收入会自动采用订单利润，无需重复录入；这里仅记录补助和劳务的实际到账。</div>
       <div class="drawer-actions"><button type="button" class="button ghost close-drawer">取消</button><button type="submit" class="button income-button">保存收入</button></div>
     </form>
   </aside>
