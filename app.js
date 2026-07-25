@@ -977,13 +977,13 @@ function renderPersonalIncomeLedger(rangeIncomes, rangeOrders) {
     }
     const items = rangeIncomes.filter(income => income.type === type);
     return { type, items, amount: sum(items, income => income.amount) };
-  }).filter(row => row.items.length);
+  });
   const maxAmount = Math.max(1, ...rows.map(row => Math.abs(row.amount)));
-  $("#personalIncomeBreakdown").innerHTML = rows.length ? rows.map(row => `<div class="product-row ${row.amount < 0 ? "loss" : ""}">
+  $("#personalIncomeBreakdown").innerHTML = rows.map(row => `<div class="product-row ${row.amount < 0 ? "loss" : ""}">
     <div class="product-meta"><span>${escapeHtml(row.type)}<small>${row.items.length} 笔</small></span><strong>${money(row.amount)}</strong></div>
     <div class="progress"><i style="width:${Math.abs(row.amount) / maxAmount * 100}%"></i></div>
-    <div class="product-sub"><span>占个人收入 ${totalIncome ? (row.amount / totalIncome * 100).toFixed(1) : 0}%</span><span>平均 ${money(row.amount / row.items.length)}</span></div>
-  </div>`).join("") : `<div class="empty-state">${emptyMarkup("暂无个人收入", "订单产生利润或记录补助、劳务到账后，这里会显示收入构成。", "＋")}</div>`;
+    <div class="product-sub"><span>占个人收入 ${totalIncome ? (row.amount / totalIncome * 100).toFixed(1) : 0}%</span><span>平均 ${money(row.items.length ? row.amount / row.items.length : 0)}</span></div>
+  </div>`).join("");
 
   const allowanceAmount = Number(state.allowanceSetting.amount) || 0;
   const currentMonth = monthKey();
