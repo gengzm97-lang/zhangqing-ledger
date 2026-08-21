@@ -147,6 +147,7 @@ input:focus, select:focus, textarea:focus { border-color: #3f8d7c; box-shadow: 0
 .income-breakdown .progress i { background: #347862 !important; }
 .income-breakdown .product-row:nth-child(2) .progress i { background: #de9b2a !important; }
 .income-breakdown .product-row:nth-child(3) .progress i { background: #4d7fa7 !important; }
+.income-breakdown .product-row:nth-child(4) .progress i { background: #6b6faf !important; }
 .income-ledger-panel { margin-bottom: 18px; padding-bottom: 0; overflow: hidden; }
 .income-ledger-head { margin-bottom: 8px; }
 .income-table-wrap { margin: 0 -21px; overflow-x: auto; border-top: 1px solid var(--line); }
@@ -155,6 +156,7 @@ input:focus, select:focus, textarea:focus { border-color: #3f8d7c; box-shadow: 0
 .income-amount { color: #347862; font-weight: 800; }
 .pill.income-type { color: #28634f; background: #e8f3ef; }
 .pill.income-type.labor { color: #8a6222; background: var(--amber-soft); }
+.pill.income-type.part-time { color: #5f568e; background: #efedf8; }
 .income-help-note { margin-top: 20px; padding: 13px 14px; color: #3f6759; border: 1px solid #cfe1da; border-radius: 11px; background: #f3f9f6; font-size: 11px; line-height: 1.6; }
 .personal-monthly-section { margin-top: 30px; padding-top: 28px; border-top: 1px solid var(--line); }
 .personal-monthly-heading { margin-bottom: 14px; }
