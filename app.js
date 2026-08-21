@@ -161,6 +161,14 @@ function formatDate(value, withTime = false) {
   return new Intl.DateTimeFormat("zh-CN", withTime ? { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" } : { year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 }
 
+function formatDateTime(value) {
+  const d = parseLocalDate(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false
+  }).format(d);
+}
+
 function toLocalInput(date = new Date()) {
   const shifted = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
   return shifted.toISOString().slice(0, 16);
@@ -220,6 +228,21 @@ function getCustomerStats(customer) {
   const asc = [...orders].sort((a, b) => parseLocalDate(a.date) - parseLocalDate(b.date));
   for (let i = 1; i < asc.length; i++) intervals.push(Math.max(1, daysBetween(asc[i].date, asc[i - 1].date)));
   const averageInterval = intervals.length ? Math.round(sum(intervals, n => n) / intervals.length) : null;
+  const intervalByOrder = new Map();
+  asc.forEach((order, index) => {
+    if (!index) intervalByOrder.set(order.id, null);
+    else intervalByOrder.set(order.id, dateKey(order.date) === dateKey(asc[index - 1].date) ? 0 : daysBetween(order.date, asc[index - 1].date));
+  });
+  const now = new Date();
+  const recentStart = new Date(now);
+  recentStart.setDate(recentStart.getDate() - 29);
+  recentStart.setHours(0, 0, 0, 0);
+  const recentEnd = new Date(now);
+  recentEnd.setHours(23, 59, 59, 999);
+  const recent30Count = orders.filter(order => {
+    const date = parseLocalDate(order.date);
+    return date >= recentStart && date <= recentEnd;
+  }).length;
   const cycle = customer.cycle === "none" ? null : customer.cycle !== "auto" && customer.cycle ? Number(customer.cycle) : averageInterval;
   let nextDate = null;
   if (lastDate && cycle) {
@@ -233,7 +256,10 @@ function getCustomerStats(customer) {
     return h < 6 ? "凌晨" : h < 12 ? "上午" : h < 18 ? "下午" : "晚上";
   }));
   return {
-    orders, totalRevenue, totalProfit, lastDate, averageInterval, cycle, nextDate, daysUntil,
+    orders, totalRevenue, totalProfit, lastDate, firstDate: asc[0]?.date || null,
+    averageInterval, minInterval: intervals.length ? Math.min(...intervals) : null,
+    maxInterval: intervals.length ? Math.max(...intervals) : null, intervalByOrder,
+    recent30Count, cycle, nextDate, daysUntil,
     preferredProduct: mostCommon(orders.map(o => o.product)),
     preferredService: mostCommon(orders.map(o => o.service)),
     weekday, timeBand,
@@ -1360,19 +1386,35 @@ function openProfile(customer) {
   const habitInsight = stats.orders.length < 2
     ? "当前订单样本较少。再记录一笔消费后，系统会开始分析充值间隔与复购时间。"
     : `${customer.name}通常每 ${stats.averageInterval} 天左右购买一次，偏好${stats.preferredService}的 ${stats.preferredProduct}，常在${stats.weekday}${stats.timeBand}下单。${nextText}。`;
+  const rechargeTimeline = stats.orders.map(order => {
+    const interval = stats.intervalByOrder.get(order.id);
+    const intervalText = interval === null ? "首次充值" : interval === 0 ? "同日再次充值" : `距上次 ${interval} 天`;
+    return `<div class="profile-recharge">
+      <div class="profile-recharge-date"><strong>${formatDateTime(order.date)}</strong><small>${intervalText}</small></div>
+      <div class="profile-recharge-detail"><strong>${escapeHtml(order.product)} · ${escapeHtml(order.service)}</strong><small>收款 ${money(order.revenue)} · 利润 ${money(orderProfitAmount(order))}${order.note ? ` · ${escapeHtml(order.note)}` : ""}</small></div>
+    </div>`;
+  }).join("");
   $("#profileContent").innerHTML = `
     <div class="profile-hero"><div><p>贡献利润 / 累计收入</p><strong>${money(stats.totalProfit)} · ${money(stats.totalRevenue)}</strong></div><div class="profile-hero-actions"><button data-edit-customer="${customer.id}">编辑资料</button><button data-delete-customer="${customer.id}">删除</button></div></div>
     <div class="profile-metrics">
-      <div class="profile-metric"><span>累计订单</span><strong>${stats.orders.length} 笔</strong></div>
+      <div class="profile-metric"><span>累计充值</span><strong>${stats.orders.length} 次</strong></div>
+      <div class="profile-metric"><span>近 30 天</span><strong>${stats.recent30Count} 次</strong></div>
+      <div class="profile-metric"><span>平均间隔</span><strong>${stats.averageInterval ? `${stats.averageInterval} 天/次` : "待积累"}</strong></div>
+      <div class="profile-metric"><span>最短间隔</span><strong>${stats.minInterval ? `${stats.minInterval} 天` : "待积累"}</strong></div>
+      <div class="profile-metric"><span>最长间隔</span><strong>${stats.maxInterval ? `${stats.maxInterval} 天` : "待积累"}</strong></div>
+      <div class="profile-metric"><span>最近充值</span><strong>${stats.lastDate ? formatDate(stats.lastDate) : "—"}</strong></div>
       <div class="profile-metric"><span>平均单利</span><strong>${money(stats.orders.length ? stats.totalProfit / stats.orders.length : 0)}</strong></div>
-      <div class="profile-metric"><span>平均间隔</span><strong>${stats.averageInterval ? `${stats.averageInterval} 天` : "待积累"}</strong></div>
       <div class="profile-metric"><span>常购项目</span><strong>${stats.preferredProduct}</strong></div>
       <div class="profile-metric"><span>交付偏好</span><strong>${stats.preferredService}</strong></div>
-      <div class="profile-metric"><span>最近消费</span><strong>${stats.lastDate ? formatDate(stats.lastDate) : "—"}</strong></div>
     </div>
     <section class="profile-section"><h3>习惯分析</h3><div class="insight-box">${escapeHtml(habitInsight)}</div></section>
+    <section class="profile-section">
+      <div class="profile-section-head"><h3>充值日期与频率</h3><span>${stats.averageInterval ? `平均 ${stats.averageInterval} 天/次` : "再记录一次后计算频率"}</span></div>
+      <div class="profile-recharge-summary"><span>首次：${stats.firstDate ? formatDate(stats.firstDate) : "—"}</span><span>最近：${stats.lastDate ? formatDate(stats.lastDate) : "—"}</span><span>近 30 天：${stats.recent30Count} 次</span></div>
+      <div class="profile-recharge-list">${rechargeTimeline || `<div class="insight-box">暂无充值记录，可从客户卡片快速记一笔订单。</div>`}</div>
+    </section>
     <section class="profile-section"><h3>联系与备注</h3><div class="insight-box">联系方式：${escapeHtml(customer.contact || "未记录")}<br>来源：${escapeHtml(customer.source || "未记录")}<br>标签：${escapeHtml((customer.tags || []).join("、") || "暂无")}<br>备注：${escapeHtml(customer.note || "暂无")}</div></section>
-    <section class="profile-section"><h3>消费记录</h3>${stats.orders.length ? stats.orders.slice(0, 20).map(o => `<div class="profile-order"><div><strong>${escapeHtml(o.product)} · ${escapeHtml(o.service)}</strong><small>${formatDate(o.date, true)}${o.note ? ` · ${escapeHtml(o.note)}` : ""}</small></div><span>${money(o.revenue)}</span></div>`).join("") : `<div class="insight-box">暂无消费记录，可从客户卡片快速记一笔订单。</div>`}</section>`;
+    `;
   openDrawer("#profileDrawer");
 }
 
