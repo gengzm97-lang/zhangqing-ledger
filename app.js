@@ -1,7 +1,7 @@
 "use strict";
 
 const STORAGE_KEY = "zhangqing_gpt_ledger_v1";
-const PRODUCTS = ["GPT Plus", "5x", "20x"];
+const PRODUCTS = ["GPT Plus", "5x", "20x", "GPT 接码"];
 const EXPENSE_CATEGORIES = ["餐饮", "交通", "购物", "住房", "娱乐", "医疗", "学习", "人情往来", "其他"];
 const PERSONAL_INCOME_TYPES = ["补助", "劳务", "兼职", "经营收入"];
 const PAGE_META = {
@@ -1321,6 +1321,10 @@ function updateProfitPreview() {
   $("#marginPreview").textContent = `利润率 ${revenue ? (profit / revenue * 100).toFixed(1) : 0}%`;
 }
 
+function updateOrderServiceForProduct() {
+  if ($("#orderProduct").value === "GPT 接码") $("#orderService").value = "接码服务";
+}
+
 function saveOrder(event) {
   event.preventDefault();
   const name = $("#orderCustomer").value.trim();
@@ -1524,6 +1528,7 @@ function initEvents() {
   $("#confirmAllowanceBtn").addEventListener("click", confirmMonthlyAllowance);
   $("#orderRevenue").addEventListener("input", updateProfitPreview);
   $("#orderCost").addEventListener("input", updateProfitPreview);
+  $("#orderProduct").addEventListener("change", updateOrderServiceForProduct);
   $("#orderCustomer").addEventListener("input", () => {
     const customer = customerByName($("#orderCustomer").value);
     $("#orderCustomerSource").value = customer?.source || "";

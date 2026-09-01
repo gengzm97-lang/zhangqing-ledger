@@ -124,6 +124,7 @@ input:focus, select:focus, textarea:focus { border-color: #3f8d7c; box-shadow: 0
 .progress i { height: 100%; display: block; border-radius: inherit; background: var(--green-2); }
 .product-row:nth-child(2) .progress i { background: #e2a53c; }
 .product-row:nth-child(3) .progress i { background: #4d7fa7; }
+.product-row:nth-child(4) .progress i { background: #6b6faf; }
 .product-row.loss .progress i { background: var(--red); }
 .product-row.loss .product-meta strong { color: var(--red); }
 .product-sub { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; }
