@@ -311,10 +311,14 @@ function expenseAvailableMonths() {
   return monthlyAvailableYears().flatMap(year => Array.from({ length: 12 }, (_, index) => {
     const month = String(index + 1).padStart(2, "0");
     return `${year}-${month}`;
-  }));
+  })).sort((a, b) => b.localeCompare(a));
 }
 
 function setExpenseMonth(value) {
+  if (!value) {
+    setExpenseDateRange("month");
+    return;
+  }
   if (!/^\d{4}-\d{2}$/.test(value)) return;
   expenseMonth = value;
   expenseRange = "custom";
