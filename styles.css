@@ -130,6 +130,8 @@ input:focus, select:focus, textarea:focus { border-color: #3f8d7c; box-shadow: 0
 .product-sub { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; }
 .expense-toolbar { margin-bottom: 18px; }
 .expense-toolbar .date-range { margin-left: auto; }
+.expense-month-picker { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; font-weight: 700; }
+.expense-month-picker select { min-height: 42px; padding: 0 32px 0 11px; color: var(--ink); }
 .personal-ledger-actions { display: flex; gap: 8px; }
 .expense-eyebrow { color: #9b574d; }
 .income-eyebrow { color: #347862; }
@@ -389,6 +391,8 @@ tbody tr:hover { background: #fbfdfc; }
   .button { padding-left: 12px; padding-right: 12px; }
   .dashboard-toolbar { align-items: stretch; flex-direction: column; }
   .expense-toolbar .date-range { margin-left: 0; }
+  .expense-month-picker { width: 100%; justify-content: space-between; }
+  .expense-month-picker select { flex: 1; }
   .personal-ledger-actions { display: grid; grid-template-columns: 1fr 1fr; }
   .allowance-controls { grid-template-columns: 1fr 1fr; }
   .allowance-amount-field { grid-column: 1 / -1; }

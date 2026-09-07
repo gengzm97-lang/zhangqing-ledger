@@ -15,6 +15,7 @@ const PAGE_META = {
 let state = loadState();
 let currentRange = "month";
 let expenseRange = "month";
+let expenseMonth = "";
 let monthlyYear = String(new Date().getFullYear());
 let activePage = "dashboard";
 let confirmAction = null;
@@ -298,10 +299,31 @@ function setDateRange(range) {
 
 function setExpenseDateRange(range) {
   expenseRange = range;
+  expenseMonth = "";
   const { start, end } = getRangeDates(range, [...state.expenses, ...state.personalIncomes]);
   $("#expenseStartDate").value = dateKey(start);
   $("#expenseEndDate").value = dateKey(end);
   $$("#expenseDatePresets button").forEach(btn => btn.classList.toggle("active", btn.dataset.range === range));
+  renderExpenses();
+}
+
+function expenseAvailableMonths() {
+  return monthlyAvailableYears().flatMap(year => Array.from({ length: 12 }, (_, index) => {
+    const month = String(index + 1).padStart(2, "0");
+    return `${year}-${month}`;
+  }));
+}
+
+function setExpenseMonth(value) {
+  if (!/^\d{4}-\d{2}$/.test(value)) return;
+  expenseMonth = value;
+  expenseRange = "custom";
+  const [year, month] = value.split("-").map(Number);
+  const start = new Date(year, month - 1, 1);
+  const end = new Date(year, month, 0);
+  $("#expenseStartDate").value = dateKey(start);
+  $("#expenseEndDate").value = dateKey(end);
+  $$("#expenseDatePresets button").forEach(button => button.classList.remove("active"));
   renderExpenses();
 }
 
@@ -1051,6 +1073,9 @@ function renderPersonalIncomeLedger(rangeIncomes, rangeOrders) {
 }
 
 function renderExpenses() {
+  const monthOptions = expenseAvailableMonths();
+  $("#expenseMonthFilter").innerHTML = `<option value="">选择月份…</option>${monthOptions.map(value => `<option value="${value}">${value.slice(0, 4)} 年 ${Number(value.slice(5))} 月</option>`).join("")}`;
+  $("#expenseMonthFilter").value = expenseMonth;
   const rangeExpenses = expenseRangeItems();
   const rangeIncomes = personalIncomeRangeItems();
   const rangeOrders = personalBusinessIncomeRangeItems();
@@ -1546,8 +1571,9 @@ function initEvents() {
   $("#startDate").addEventListener("change", () => { currentRange = "custom"; $$("#datePresets button").forEach(b => b.classList.remove("active")); renderDashboard(); });
   $("#endDate").addEventListener("change", () => { currentRange = "custom"; $$("#datePresets button").forEach(b => b.classList.remove("active")); renderDashboard(); });
   $$("#expenseDatePresets button").forEach(btn => btn.addEventListener("click", () => setExpenseDateRange(btn.dataset.range)));
-  $("#expenseStartDate").addEventListener("change", () => { expenseRange = "custom"; $$("#expenseDatePresets button").forEach(b => b.classList.remove("active")); renderExpenses(); });
-  $("#expenseEndDate").addEventListener("change", () => { expenseRange = "custom"; $$("#expenseDatePresets button").forEach(b => b.classList.remove("active")); renderExpenses(); });
+  $("#expenseStartDate").addEventListener("change", () => { expenseRange = "custom"; expenseMonth = ""; $$("#expenseDatePresets button").forEach(b => b.classList.remove("active")); renderExpenses(); });
+  $("#expenseEndDate").addEventListener("change", () => { expenseRange = "custom"; expenseMonth = ""; $$("#expenseDatePresets button").forEach(b => b.classList.remove("active")); renderExpenses(); });
+  $("#expenseMonthFilter").addEventListener("change", event => setExpenseMonth(event.target.value));
   $("#monthlyYearFilter").addEventListener("change", event => {
     monthlyYear = event.target.value;
     renderMonthlyReport();
