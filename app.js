@@ -1671,8 +1671,12 @@ window.ZhangQingApp = {
   },
   acceptAutoExpense: row => {
     const expense = window.ZhangQingAuto.expenseFromRow(row);
-    if (!expense || row.bill?.type !== "Expend") throw new Error("这笔记录请在原支付账单中核对后手工记账");
+    if (!expense || !["Expend", "Transfer"].includes(row.bill?.type) ||
+        (!(row.bill?.type === "Expend" && row.bill?.eligible === true) && !window.ZhangQingAuto.isConfirmedExpense(row))) {
+      throw new Error("这笔记录请先确认当前版本，再核对是否重复记账");
+    }
     if (state.expenses.some(item => item.id === expense.id) || state.deleted.expenses[expense.id]) throw new Error("这笔记录已存在或曾被删除，不会再次新增");
+    if (state.autoDecisions.some(item => item.id === row.id && item.action === "ignore" && item.payloadHash === row.payload_hash)) throw new Error("当前版本已被忽略，不会再次新增");
     expense.updatedAt = new Date().toISOString();
     const next = { ...state, expenses: [...state.expenses, expense], updatedAt: expense.updatedAt };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));

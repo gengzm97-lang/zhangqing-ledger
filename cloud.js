@@ -192,7 +192,7 @@
     for (let page = 0; page < 110; page++) {
       const query = new URLSearchParams({
         user_id: `eq.${userId}`,
-        select: "id,user_id,source_id,upstream_id,payload_hash,bill,first_received_at,updated_at",
+        select: "id,user_id,source_id,upstream_id,payload_hash,bill,first_received_at,updated_at,expense_confirmed_hash,expense_confirmed_at",
         order: "updated_at.asc,id.asc", limit: "500"
       });
       if (cursor) query.set("or", `(updated_at.gt.${cursor.time},and(updated_at.eq.${cursor.time},id.gt.${cursor.id}))`);
@@ -210,7 +210,8 @@
   }
 
   async function autoRequest(path, options = {}) {
-    if (!/^\/devices(?:\/[a-f0-9-]+\/(?:rotate|revoke))?$/i.test(path)) throw new Error("无效的设备管理地址");
+    if (!/^\/devices(?:\/[a-f0-9-]+\/(?:rotate|revoke))?$/i.test(path) &&
+        !/^\/inbox\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/confirm-expense$/i.test(path)) throw new Error("无效的自动账单管理地址");
     const current = await ensureSession();
     return request(`/functions/v1/autoaccounting${path}`, {
       ...options, headers: cloudHeaders(current.access_token), cache: "no-store"
@@ -218,7 +219,8 @@
   }
 
   async function syncNow(showFeedback = false) {
-    if (syncing || !configured() || !session || !navigator.onLine) return;
+    if (syncing) { resyncNeeded = true; return; }
+    if (!configured() || !session || !navigator.onLine) return;
     syncing = true;
     resyncNeeded = false;
     const epoch = authEpoch;

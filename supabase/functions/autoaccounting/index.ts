@@ -52,6 +52,8 @@ async function database(path: string, options: RequestInit = {}) {
 
 async function authenticatedUser(request: Request) {
   const token = bearer(request);
+  // Device upload credentials can collect bills, never make owner decisions.
+  if (uploadTokenPattern.test(token)) throw new ApiError(401, "LOGIN_REQUIRED", "请登录账清后确认账单。");
   const { url, serviceKey } = serverConfig();
   // Verify with the Auth service; decoding a JWT locally is not authentication.
   const response = await fetchBounded(`${url}/auth/v1/user`, { headers: { apikey: serviceKey, Authorization: `Bearer ${token}` } });
@@ -100,6 +102,9 @@ function rpcError(result: { ok: boolean; code?: string }) {
     INVALID_TOKEN: [401, "设备令牌无效或已撤销。"],
     INVALID_DEVICE: [400, "设备名称无效。"],
     INVALID_BILL: [400, "账单字段无效。"],
+    INBOX_NOT_FOUND: [404, "账单不存在。"],
+    PAYLOAD_CHANGED: [409, "来源账单已变化，请刷新后重新核对。"],
+    NOT_CONFIRMABLE: [400, "这笔账单不能直接确认为个人支出，请核对来源信息。"],
     DEVICE_LIMIT: [409, "最多连接 20 个有效设备，请先撤销不用的设备。"],
     RATE_LIMIT: [429, "设备上传过于频繁，请稍后重新导出。"],
     INBOX_LIMIT: [409, "自动账单收件箱已达到 50000 条上限，请联系维护者处理。"],
@@ -139,6 +144,21 @@ async function route(request: Request) {
     const result = await database("rpc/autoaccounting_create_source", { method: "POST", body: JSON.stringify({ p_user_id: userId, p_label: label, p_token_hash: await sha256(token) }) });
     rpcError(result);
     return { ok: true, source: result.source, token, receiverUrl: serverConfig().receiverUrl };
+  }
+
+  const confirmation = /^\/inbox\/([0-9a-f-]{36})\/confirm-expense$/i.exec(path);
+  if (confirmation && method === "POST") {
+    if (!uuidPattern.test(confirmation[1])) throw new ApiError(400, "INVALID_BILL", "账单编号无效。");
+    const userId = await authenticatedUser(request);
+    const body = await readJson(request, 4096);
+    if (!body || typeof body !== "object" || Array.isArray(body) || typeof body.payloadHash !== "string" || !/^[0-9a-f]{64}$/.test(body.payloadHash)) {
+      throw new ApiError(400, "INVALID_BILL", "请提交当前账单版本后重试。");
+    }
+    const result = await database("rpc/autoaccounting_confirm_expense", { method: "POST", body: JSON.stringify({
+      p_user_id: userId, p_inbox_id: confirmation[1], p_expected_hash: body.payloadHash,
+    }) });
+    rpcError(result);
+    return result;
   }
 
   const action = /^\/devices\/([0-9a-f-]{36})\/(rotate|revoke)$/i.exec(path);

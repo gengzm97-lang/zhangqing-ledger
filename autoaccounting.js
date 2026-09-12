@@ -18,6 +18,31 @@
   const cents = value => Math.round(Number(value) * 100);
   const money = (value, currency = "CNY") => currency === "CNY" ? `¥${Number(value || 0).toFixed(2)}` : `${Number(value || 0).toFixed(2)} ${String(currency || "未知币种")}`;
 
+  function validTimestamp(value) {
+    if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:\d{2})?$/.test(value) || !validDate(value)) return false;
+    const [year, month, date] = value.slice(0, 10).split("-").map(Number);
+    const hour = Number(value.slice(11, 13)), minute = Number(value.slice(14, 16));
+    const second = value[16] === ":" ? Number(value.slice(17, 19)) : 0;
+    return month >= 1 && month <= 12 && date >= 1 && date <= new Date(Date.UTC(year, month, 0)).getUTCDate() &&
+      hour <= 23 && minute <= 59 && second <= 59;
+  }
+
+  // A confirmation authorizes only the exact normalized payload reviewed on the server.
+  function isConfirmedExpense(row) {
+    return HASH.test(String(row?.payload_hash || "")) && row?.expense_confirmed_hash === row.payload_hash && validTimestamp(row?.expense_confirmed_at);
+  }
+
+  function isConfirmableTransfer(row) {
+    const bill = row?.bill || {};
+    const amount = Number(bill.amount);
+    const reasons = typeof bill.reviewReason === "string" ? bill.reviewReason.split("；").map(value => value.trim()) : [];
+    return ["Transfer", "Expend"].includes(bill.type) && bill.merchant === "微信转账" && bill.note === "已完成转出，待确认用途" &&
+      bill.currency === "CNY" && bill.payment === "微信" && Number.isFinite(amount) && amount > 0 &&
+      Number.isSafeInteger(cents(amount)) && cents(amount) > 0 && Math.abs(amount * 100 - cents(amount)) < 0.000001 &&
+      validTimestamp(bill.date) && validTimestamp(row.first_received_at) && reasons.length > 0 &&
+      reasons.every(reason => ["非普通消费支出，需确认归属", "可能涉及转账、退款或经营用途"].includes(reason));
+  }
+
   function stableExpenseId(row) {
     if (!UUID.test(String(row?.id || "")) || !UUID.test(String(row?.source_id || "")) ||
         !UPSTREAM_ID.test(String(row?.upstream_id || "")) || !Number.isSafeInteger(Number(row?.upstream_id)) ||
@@ -31,8 +56,12 @@
     const id = stableExpenseId(row);
     const bill = row.bill || {};
     const amount = Number(bill.amount);
-    if (bill.type !== "Expend" || bill.currency !== "CNY" || !Number.isFinite(amount) || amount <= 0 || !Number.isSafeInteger(cents(amount)) ||
-        !["微信", "支付宝"].includes(bill.payment) || !validDate(bill.date) || !validDate(row.first_received_at)) {
+    const confirmed = isConfirmedExpense(row);
+    if (!["Expend", "Transfer"].includes(bill.type) || (!confirmed && !(bill.type === "Expend" && bill.eligible === true)) ||
+        bill.currency !== "CNY" || !Number.isFinite(amount) || amount <= 0 || !Number.isSafeInteger(cents(amount)) ||
+        cents(amount) <= 0 || Math.abs(amount * 100 - cents(amount)) >= 0.000001 ||
+        !["微信", "支付宝"].includes(bill.payment) ||
+        !(confirmed ? validTimestamp(bill.date) && validTimestamp(row.first_received_at) : validDate(bill.date) && validDate(row.first_received_at))) {
       throw new Error("请核对自动账单的金额、币种、日期和支付方式");
     }
     return {
@@ -45,7 +74,8 @@
         origin: "autoaccounting", sourceId: row.source_id, upstreamId: String(row.upstream_id),
         payloadHash: row.payload_hash, platform: bill.payment, merchant: String(bill.merchant || ""),
         originalCents: Number.isSafeInteger(bill.originalCents) ? bill.originalCents : cents(amount),
-        importedAt: row.first_received_at
+        importedAt: row.first_received_at,
+        ...(confirmed ? { reviewedAt: row.expense_confirmed_at } : {})
       }
     };
   }
@@ -74,18 +104,23 @@
       if (recorded?.billSource?.payloadHash === row.payload_hash) continue;
       let expense = null;
       try { expense = expenseFromRow(row); } catch (_) {}
-      const isExpense = row.bill?.type === "Expend";
+      const confirmed = isConfirmedExpense(row);
+      const confirmable = isConfirmableTransfer(row);
+      const isExpense = row.bill?.type === "Expend" || (confirmed && row.bill?.type === "Transfer");
+      const staleConfirmation = Boolean(row.expense_confirmed_hash || row.expense_confirmed_at) && !confirmed;
       let reason = "";
       if (recorded) reason = "这笔账已记入，但来源金额或状态有变化，请核对原支出。";
       else if (decision?.action === "ignore") reason = "这笔账曾被忽略，但来源内容有变化，请重新核对。";
+      else if (staleConfirmation) reason = "确认只对应当时的账单版本；来源内容已变更或确认信息无效，请重新核对。";
+      else if (confirmable && !confirmed) reason = "这是一笔已完成的转出，请确认是否属于个人消费。";
       else if (!expense) reason = row.bill?.reviewReason || "金额、币种、日期或支付方式需要核对。";
       else if (!isExpense) reason = row.bill?.reviewReason || "这不是明确的消费支出，请核对用途。";
-      else if (row.bill?.eligible !== true) reason = row.bill?.reviewReason || "这笔账需要确认是否属于个人支出。";
+      else if (!confirmed && row.bill?.eligible !== true) reason = row.bill?.reviewReason || "这笔账需要确认是否属于个人支出。";
       const suspect = !recorded && expense && expenses.find(item =>
         day(item.date) === day(expense.date) && cents(item.amount) === cents(expense.amount) && (!item.payment || item.payment === expense.payment));
       if (suspect) reason = "同一天已有相同金额和支付方式的支出，可能已手记或导入。";
       if (reason) {
-        pendingItems.push({ ...row, pendingReason: reason, expenseId: recorded?.id || "", canAccept: Boolean(expense && row.bill?.eligible === true && !recorded) });
+        pendingItems.push({ ...row, pendingReason: reason, expenseId: recorded?.id || "", canAccept: Boolean(!recorded && (confirmable || (expense && (confirmed || row.bill?.eligible === true)))) });
         continue;
       }
       expenses.push(expense);
@@ -148,7 +183,7 @@
     page = Math.min(page, pages - 1);
     const visible = pending.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
     host.innerHTML = `<div class="panel-head"><div><p class="eyebrow">自动记账</p><h2>待确认支出 <span class="auto-count">${pending.length}</span></h2></div><button type="button" class="button ghost" data-auto-action="sync" ${loggedIn && !busy ? "" : "disabled"}>检查新账单</button></div>
-      <p class="auto-copy">这里显示全部月份待核对的自动账单。收入和经营成本请按实际用途核对后处理。</p>
+      <p class="auto-copy">这里显示全部月份待核对的自动账单。收入和经营成本请按实际用途核对后处理。确认只对应当前版本；退款或后续变更仍留待核对，不会覆盖原支出。</p>
       <div class="auto-message" role="status">${esc(syncMessage)}</div>
       ${visible.length ? `<div class="auto-inbox-table"><table><thead><tr><th>时间 / 商户</th><th>金额</th><th>需要核对</th><th>操作</th></tr></thead><tbody>${visible.map(row => `<tr>
         <td><strong>${esc(row.bill?.merchant || row.bill?.note || "未注明商户")}</strong><small>${esc(String(row.bill?.date || "未注明日期").replace("T", " ").slice(0, 16))} · ${esc(row.bill?.payment || "未注明方式")}</small></td>
@@ -223,16 +258,27 @@
     const row = pending.find(item => item.id === button.dataset.row);
     if (!row || !context().loggedIn) return;
     if (action === "edit" && row.expenseId) return window.ZhangQingApp?.editAutoExpense?.(row.expenseId);
-    if (action === "accept" && (!row.canAccept || !window.confirm(`将 ${row.bill?.merchant || "这笔账单"} 的 ${money(row.bill?.amount)} 确认为个人支出？请确认它不是经营成本，也没有重复记账。`))) return;
+    if (action === "accept" && (!row.canAccept || !window.confirm(`将 ${row.bill?.merchant || "这笔账单"} 的 ${money(row.bill?.amount)} 确认为个人支出？请确认它不是经营成本，也没有重复记账。确认只对应当前版本；退款或后续变更需要重新核对。`))) return;
     if (!["ignore", "accept"].includes(action)) return;
-    return withBusy(async () => {
+    const owner = context().userId;
+    return withBusy(async ticket => {
       const app = window.ZhangQingApp;
       if (action === "ignore") {
         if (!app?.saveAutoDecision) throw new Error("not_ready");
         await app.saveAutoDecision(row.id, row.payload_hash);
       } else {
-        if (!app?.acceptAutoExpense) throw new Error("not_ready");
-        await app.acceptAutoExpense(row);
+        const needsCloudConfirmation = !isConfirmedExpense(row) && (row.bill?.type === "Transfer" ||
+          (row.bill?.merchant === "微信转账" && row.bill?.note === "已完成转出，待确认用途"));
+        if (needsCloudConfirmation) {
+          if (!isConfirmableTransfer(row) || !window.ZhangQingCloud?.syncNow) throw new Error("这笔记录需要在原账单中继续核对");
+          await api(`/inbox/${encodeURIComponent(row.id)}/confirm-expense`, { method: "POST", body: JSON.stringify({ payloadHash: row.payload_hash }) });
+          if (ticket !== generation || owner !== context().userId) return;
+          await window.ZhangQingCloud.syncNow();
+          if (ticket !== generation || owner !== context().userId) return;
+        } else {
+          if (!app?.acceptAutoExpense) throw new Error("not_ready");
+          await app.acceptAutoExpense(row);
+        }
       }
       ledger = app.getState();
       pending = applyToState(ledger, rows).pending;
@@ -265,7 +311,7 @@
     if (context().loggedIn) refreshDevices().catch(() => {});
   }
 
-  window.ZhangQingAuto = { applyToState, stableExpenseId, expenseFromRow, onSync, onAuthChanged, refreshDevices };
+  window.ZhangQingAuto = { applyToState, stableExpenseId, expenseFromRow, isConfirmedExpense, onSync, onAuthChanged, refreshDevices };
   // Deferred scripts run while readyState is "interactive"; wait for cloud.js too.
   if (document.readyState !== "complete") document.addEventListener("DOMContentLoaded", init, { once: true });
   else init();
