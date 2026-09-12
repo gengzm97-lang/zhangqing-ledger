@@ -159,6 +159,11 @@
 
         <div id="expenseSummaryCards" class="summary-grid expense-summary-grid"></div>
 
+        <article class="panel bill-import-entry">
+          <div><p class="eyebrow">账单补漏</p><h2>微信、支付宝账单导入</h2><p>导入导出的 Excel / CSV，集中核对遗漏的小笔支出。</p></div>
+          <button id="openBillImportBtn" class="button primary">导入支付账单</button>
+        </article>
+
         <div class="personal-income-grid">
           <article class="panel allowance-panel">
             <div class="panel-head">
@@ -418,6 +423,22 @@
     </form>
   </aside>
 
+  <aside id="billImportDrawer" class="drawer wide-drawer" aria-hidden="true">
+    <div class="drawer-inner">
+      <div class="drawer-head"><div><p class="eyebrow">个人账本 · 批量补漏</p><h2>导入支付账单</h2></div><button type="button" class="icon-btn close-drawer" aria-label="关闭账单导入">×</button></div>
+      <p class="bill-import-copy">文件在当前设备解析。点击确认后才新增支出，新增记录会随你已配置的云同步保存。</p>
+      <details class="bill-import-help"><summary>怎么准备账单文件？</summary><p>到微信或支付宝的账单页面，寻找“下载账单”或“开具交易流水证明”，选择“用于个人对账”，导出 Excel / CSV 文件。若收到压缩包，请先解压。不同版本的入口可能不同。</p><p>导出时的身份验证只在微信、支付宝中完成，账清不索取支付密码。这里不接受 PDF 证明或未解压的 ZIP。</p></details>
+      <label class="field bill-import-file"><span>选择账单（可同时选择两份）</span><input id="billImportFiles" type="file" accept=".csv,.xlsx,.xls" multiple></label>
+      <label class="field bill-import-month"><span>仅查看这个月（留空查看文件内全部月份）</span><input id="billImportMonth" type="month"></label>
+      <div id="billImportMessage" class="bill-import-copy" role="status">支持常见微信、支付宝个人对账表头；首次导入请核对金额与日期。</div>
+      <div class="bill-import-actions"><button id="billSelectSafe" type="button" class="button ghost">勾选明确消费</button><button id="billSelectNone" type="button" class="button ghost">取消勾选</button></div>
+      <p class="bill-import-copy">转账、红包、业务采购等默认不勾选；退款请核对并调整原支出，不按新支出导入。手机上可左右滑动表格查看金额和分类。</p>
+      <div class="bill-preview-wrap"><table><thead><tr><th>导入</th><th>日期 / 渠道</th><th>交易说明</th><th class="num">金额</th><th>分类</th><th>检查结果</th></tr></thead><tbody id="billImportRows"></tbody></table></div>
+      <div class="bill-import-actions"><button id="billPagePrev" type="button" class="button ghost">上一页</button><span id="billPageInfo" class="bill-import-copy"></span><button id="billPageNext" type="button" class="button ghost">下一页</button></div>
+      <div class="drawer-actions bill-import-footer"><strong id="billImportTotal">已选 0 笔</strong><button type="button" class="button ghost close-drawer">取消</button><button id="billImportConfirm" type="button" class="button primary" disabled>确认新增支出</button></div>
+    </div>
+  </aside>
+
   <aside id="profileDrawer" class="drawer wide-drawer" aria-hidden="true">
     <div class="drawer-inner">
       <div class="drawer-head"><div><p class="eyebrow">客户画像</p><h2 id="profileName">客户详情</h2></div><button type="button" class="icon-btn close-drawer">×</button></div>
@@ -436,5 +457,7 @@
   <script src="cloud-config.js" defer></script>
   <script src="app.js" defer></script>
   <script src="cloud.js" defer></script>
+  <script src="bill-parser.js" defer></script>
+  <script src="bill-import.js" defer></script>
 </body>
 </html>

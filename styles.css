@@ -129,6 +129,27 @@ input:focus, select:focus, textarea:focus { border-color: #3f8d7c; box-shadow: 0
 .product-row.loss .product-meta strong { color: var(--red); }
 .product-sub { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; }
 .expense-toolbar { margin-bottom: 18px; }
+.bill-import-entry { margin-bottom: 18px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.bill-import-entry h2 { margin: 5px 0 8px; font-size: 17px; }
+.bill-import-entry p:last-child, .bill-import-copy { color: var(--muted); font-size: 12px; line-height: 1.7; }
+.bill-import-copy.error { color: var(--red); }
+.bill-import-help { padding: 12px; margin-bottom: 16px; background: var(--green-soft); border-radius: 10px; font-size: 12px; line-height: 1.7; }
+.bill-import-help summary { cursor: pointer; font-weight: 700; }
+.bill-import-file { margin-bottom: 14px; }
+.bill-import-file input { width: 100%; padding: 10px; }
+.bill-import-actions { display: flex; gap: 8px; margin-top: 15px; }
+.bill-preview-wrap { overflow: auto; max-height: 52vh; border: 1px solid var(--line); border-radius: 10px; }
+.bill-preview-wrap th { position: sticky; top: 0; z-index: 1; }
+.bill-preview-wrap td { font-size: 12px; padding: 12px 10px; }
+.bill-preview-wrap .bill-description { min-width: 140px; max-width: 240px; white-space: normal; overflow-wrap: anywhere; }
+.bill-preview-wrap .bill-reason { min-width: 140px; max-width: 220px; white-space: normal; color: var(--muted); }
+.bill-preview-wrap small { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; }
+.bill-preview-wrap input[type=checkbox] { width: 21px; height: 21px; accent-color: var(--green); }
+.bill-preview-wrap select { padding: 8px; }
+.bill-preview-wrap tr.bill-disabled { background: #f7f8f7; }
+.bill-import-footer { flex-wrap: wrap; align-items: center; }
+.bill-import-footer strong { margin-right: auto; font-size: 12px; }
+@media (max-width: 570px) { .bill-import-entry { flex-direction: column; align-items: stretch; } .bill-import-footer strong { width: 100%; } }
 .expense-toolbar .date-range { margin-left: auto; }
 .expense-month-picker { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; font-weight: 700; }
 .expense-month-picker select { min-height: 42px; padding: 0 32px 0 11px; color: var(--ink); }

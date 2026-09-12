@@ -1258,6 +1258,7 @@ function saveExpense(event) {
   if (!Number.isFinite(amount) || amount <= 0) return showToast("请输入正确的支出金额");
   const id = $("#expenseId").value;
   const expense = {
+    ...(state.expenses.find(item => item.id === id) || {}),
     id: id || uid("exp"), amount, category: $("#expenseCategory").value,
     payment: $("#expensePayment").value, date: $("#expenseDate").value,
     note: $("#expenseNote").value.trim(), updatedAt: new Date().toISOString()
@@ -1650,6 +1651,31 @@ function init() {
 }
 
 window.ZhangQingApp = {
+  openBillImport: () => openDrawer("#billImportDrawer"),
+  importBillExpenses: incoming => {
+    const known = new Set(state.expenses.map(item => item.id));
+    const added = [];
+    for (const item of incoming) {
+      if (!/^bill_(wx|ali)_[a-f0-9]{64}$/.test(item.id || "")) throw new Error("账单交易标识无效");
+      if (known.has(item.id) || state.deleted.expenses[item.id]) continue;
+      if (!Number.isFinite(item.amount) || item.amount <= 0 || !EXPENSE_CATEGORIES.includes(item.category) || !/^(微信|支付宝)$/.test(item.payment)) throw new Error("请核对导入金额或分类");
+      if (!item.date || Number.isNaN(new Date(item.date).getTime())) throw new Error("请核对导入日期");
+      known.add(item.id); added.push(item);
+    }
+    if (!added.length) return 0;
+    const next = { ...state, expenses: [...state.expenses, ...added], updatedAt: new Date().toISOString() };
+    // Persist before changing the live ledger so storage errors cannot leave a partial import.
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    state = next;
+    const dates = added.map(item => dateKey(item.date)).sort();
+    $("#expenseStartDate").value = dates[0]; $("#expenseEndDate").value = dates[dates.length - 1];
+    expenseRange = "custom"; expenseMonth = "";
+    $("#expenseSearch").value = ""; $("#expenseCategoryFilter").value = "";
+    $$("#expenseDatePresets button").forEach(button => button.classList.remove("active"));
+    renderExpenses();
+    try { window.ZhangQingCloud?.localChanged(); } catch (_) { showToast("支出已保存在本机，请稍后检查云同步。"); }
+    return added.length;
+  },
   getState: () => JSON.parse(JSON.stringify(state)),
   mergeStates: mergeCloudState,
   replaceState: nextState => {
