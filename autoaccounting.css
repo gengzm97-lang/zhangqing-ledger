@@ -1,0 +1,59 @@
+.auto-settings, .auto-inbox { margin-bottom: 18px; }
+.auto-settings { grid-column: 1 / -1; }
+.auto-copy { color: var(--muted); font-size: 12px; line-height: 1.8; margin: 12px 0; }
+.auto-status, .auto-count { display: inline-block; padding: 6px 10px; border-radius: 20px; color: var(--green); background: var(--green-soft); font-size: 12px; font-weight: 700; white-space: nowrap; }
+.auto-count { margin-left: 5px; padding: 3px 8px; }
+.auto-connect-form { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; margin: 18px 0 10px; }
+.auto-connect-form .field { min-width: 180px; flex: 1; max-width: 420px; }
+.auto-connect-form input { width: 100%; padding: 10px 12px; }
+.auto-message { color: var(--muted); font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; }
+.auto-message:empty { display: none; }
+.auto-secret { margin-top: 16px; padding: 16px; border-radius: 12px; border: 1px solid #b8d6ca; background: #f1f8f4; }
+.auto-secret-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; font-size: 13px; }
+.auto-secret-heading button { flex-shrink: 0; white-space: nowrap; }
+.auto-secret .field { margin-top: 12px; }
+.auto-copy-field { display: flex; align-items: center; gap: 8px; }
+.auto-copy-field input { flex: 1; width: 0; min-width: 0; padding: 10px; font-size: 12px; }
+.auto-copy-field button { flex-shrink: 0; }
+.auto-device-list { margin-top: 16px; }
+.auto-device { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-top: 1px solid var(--line); }
+.auto-device strong { display: block; font-size: 13px; overflow-wrap: anywhere; }
+.auto-device small { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; }
+.auto-device-actions, .auto-row-actions { display: flex; gap: 7px; flex-wrap: wrap; }
+.auto-device-actions .button, .auto-row-actions .button { font-size: 12px; min-height: 36px; padding: 7px 10px; }
+.auto-danger { color: var(--red) !important; }
+.auto-inbox-table { overflow-x: auto; margin-top: 12px; border: 1px solid var(--line); border-radius: 10px; }
+.auto-inbox-table table { width: 100%; border-collapse: collapse; }
+.auto-inbox-table th { background: var(--bg); font-size: 12px; padding: 11px; text-align: left; }
+.auto-inbox-table td { padding: 13px 11px; border-top: 1px solid var(--line); font-size: 12px; vertical-align: top; }
+.auto-inbox-table td:first-child { min-width: 150px; max-width: 240px; white-space: normal; overflow-wrap: anywhere; }
+.auto-inbox-table small { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; }
+.auto-inbox-table .auto-reason { min-width: 190px; max-width: 320px; color: var(--muted); line-height: 1.6; white-space: normal; overflow-wrap: anywhere; }
+.auto-amount { font-weight: 700; white-space: nowrap; }
+.auto-row-actions { min-width: 135px; }
+.auto-empty { margin: 16px 0 3px; padding: 18px; border-radius: 10px; background: var(--bg); color: var(--muted); font-size: 12px; line-height: 1.7; }
+.auto-pagination { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.auto-pagination span { margin-right: auto; color: var(--muted); font-size: 12px; }
+.auto-pagination .button { font-size: 12px; }
+@media (max-width: 640px) {
+  .auto-settings .panel-head, .auto-inbox .panel-head { flex-wrap: wrap; }
+  .auto-connect-form .field { max-width: none; flex-basis: 100%; }
+  .auto-connect-form > .button { flex: 1; }
+  .auto-secret { padding: 12px; }
+  .auto-secret-heading { align-items: flex-start; }
+  .auto-device { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .auto-device-actions { width: 100%; }
+  .auto-device-actions .button { flex: 1; }
+  .auto-copy-field .button { padding: 9px; font-size: 12px; }
+  .auto-inbox-table, .auto-inbox-table table, .auto-inbox-table tbody { display: block; width: 100%; min-width: 0; }
+  .auto-inbox-table { border: 0; overflow: visible; }
+  .auto-inbox-table thead { display: none; }
+  .auto-inbox-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
+  .auto-inbox-table td { display: block; border: 0; padding: 0; }
+  .auto-inbox-table td:first-child { min-width: 0; max-width: none; }
+  .auto-inbox-table .auto-amount { padding-left: 12px; }
+  .auto-inbox-table .auto-reason { grid-column: 1 / -1; min-width: 0; max-width: none; margin-top: 10px; }
+  .auto-inbox-table td:last-child { grid-column: 1 / -1; margin-top: 10px; }
+  .auto-row-actions { min-width: 0; }
+  .auto-row-actions .button { min-height: 40px; }
+}

@@ -1,0 +1,4 @@
+# The external uploader uses its own revocable token, not a Supabase user JWT.
+# Every non-health request is authenticated again inside the function.
+[functions.autoaccounting]
+verify_jwt = false

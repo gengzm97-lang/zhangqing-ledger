@@ -13,6 +13,7 @@
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <title>账清 · GPT 业务记账</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="autoaccounting.css">
 </head>
 <body>
   <div class="app-shell">
@@ -225,6 +226,7 @@
           </article>
         </div>
 
+        <div id="autoAccountingInbox"></div>
         <div class="toolbar filter-bar expense-filter-bar">
           <label class="search-box wide"><span>⌕</span><input id="expenseSearch" placeholder="搜索备注、支付方式…"></label>
           <select id="expenseCategoryFilter" aria-label="筛选支出分类">
@@ -316,6 +318,7 @@
             <small id="installHint">如果按钮不可用，请在 Chrome 菜单选择“添加到主屏幕”。</small>
           </article>
         </div>
+        <div id="autoAccountingSettings"></div>
         <div class="settings-grid">
           <article class="panel settings-card">
             <div class="setting-icon green">↧</div>
@@ -456,6 +459,7 @@
   <div id="toast" class="toast" role="status"></div>
   <script src="cloud-config.js" defer></script>
   <script src="app.js" defer></script>
+  <script src="autoaccounting.js" defer></script>
   <script src="cloud.js" defer></script>
   <script src="bill-parser.js" defer></script>
   <script src="bill-import.js" defer></script>

@@ -98,11 +98,11 @@
         row.checkReason = deleted[row.id] ? "这条导入记录曾被删除，不会自动恢复。" : "已导入过，跳过重复交易。";
         if (saved && (row.disposition !== "expense" || row.cents !== saved.billSource?.originalCents)) row.checkReason = "此交易已有记录；本次金额/状态需核对，请检查原支出。";
       }
-      const suspects = ledger.expenses.filter(item => !item.billSource && Math.round(Number(item.amount) * 100) === row.cents
+      const suspects = ledger.expenses.filter(item => (!item.billSource || item.billSource.origin === "autoaccounting") && Math.round(Number(item.amount) * 100) === row.cents
         && String(item.date).slice(0, 10) === row.date.slice(0, 10) && (!item.payment || item.payment === row.payment));
       const signature = suspects.map(item => item.id).sort().join("|");
       if (suspects.length && !row.exactDuplicate && !row.conflict) {
-        row.checkReason = "疑似已手记：同日同金额，请核对后再勾选。";
+        row.checkReason = "疑似已手记或自动记入：同日同金额，请核对后再勾选。";
         if (selectDefaults || signature !== row.suspects) row.selected = false;
       } else if (selectDefaults) row.selected = row.disposition === "expense" && canSelect(row);
       row.suspects = signature;

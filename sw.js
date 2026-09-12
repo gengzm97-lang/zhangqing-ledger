@@ -1,9 +1,10 @@
 "use strict";
 
-const CACHE_NAME = "zhangqing-pwa-v19";
+const CACHE_NAME = "zhangqing-pwa-v20";
 const APP_ASSETS = [
   "./", "./index.html", "./styles.css", "./app.js", "./cloud.js", "./cloud-config.js",
   "./bill-parser.js", "./bill-import.js", "./vendor/xlsx.full.min.js",
+  "./autoaccounting.js", "./autoaccounting.css",
   "./manifest.webmanifest", "./icons/icon.svg", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/icon-maskable-512.png"
 ];
 

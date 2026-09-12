@@ -8,6 +8,12 @@
   let syncTimer = null;
   let syncing = false;
   let installPrompt = null;
+  let resyncNeeded = false;
+  let authEpoch = 0;
+  let inboxOwner = "";
+  let inboxRows = new Map();
+  let inboxCursor = null;
+  let refreshFlight = null;
 
   const $ = selector => document.querySelector(selector);
 
@@ -26,9 +32,16 @@
   }
 
   function saveSession(next) {
+    const identityChanged = session?.user?.id !== next?.user?.id;
     session = next;
     if (next) localStorage.setItem(SESSION_KEY, JSON.stringify(next));
     else localStorage.removeItem(SESSION_KEY);
+    if (identityChanged || !next) {
+      authEpoch++;
+      inboxOwner = ""; inboxRows = new Map(); inboxCursor = null;
+      window.ZhangQingAuto?.onAuthChanged();
+      if (syncing && next) resyncNeeded = true;
+    }
     renderCloudUI();
   }
 
@@ -52,7 +65,7 @@
     let data = null;
     try { data = text ? JSON.parse(text) : null; } catch (_) { data = text; }
     if (!response.ok) {
-      const message = data?.msg || data?.message || data?.error_description || data?.error || `请求失败（${response.status}）`;
+      const message = data?.msg || data?.message || data?.error_description || data?.error?.message || (typeof data?.error === "string" ? data.error : null) || `请求失败（${response.status}）`;
       const error = new Error(message);
       error.status = response.status;
       throw error;
@@ -72,11 +85,19 @@
   async function ensureSession() {
     if (!session?.refresh_token) throw new Error("请先登录云同步账号");
     if (session.access_token && session.expires_at > Date.now() + 60000) return session;
-    const data = await request("/auth/v1/token?grant_type=refresh_token", {
-      method: "POST", headers: cloudHeaders(), body: JSON.stringify({ refresh_token: session.refresh_token })
-    });
-    saveSession(authPayload(data, session.user?.email));
-    return session;
+    const epoch = authEpoch, token = session.refresh_token, email = session.user?.email;
+    if (refreshFlight?.epoch === epoch && refreshFlight.token === token) return refreshFlight.promise;
+    const flight = { epoch, token, promise: null };
+    flight.promise = (async () => {
+      const data = await request("/auth/v1/token?grant_type=refresh_token", {
+        method: "POST", headers: cloudHeaders(), body: JSON.stringify({ refresh_token: token })
+      });
+      if (epoch !== authEpoch || session?.refresh_token !== token) throw new Error("账号已切换，旧请求已取消");
+      saveSession(authPayload(data, email));
+      return session;
+    })().finally(() => { if (refreshFlight === flight) refreshFlight = null; });
+    refreshFlight = flight;
+    return flight.promise;
   }
 
   function setStatus(type, badgeText, message = "") {
@@ -164,19 +185,67 @@
     });
   }
 
+  async function fetchInbox(token, userId, epoch) {
+    const previous = inboxOwner === userId ? inboxRows : new Map();
+    const nextRows = new Map(previous);
+    let cursor = inboxOwner === userId ? inboxCursor : null;
+    for (let page = 0; page < 110; page++) {
+      const query = new URLSearchParams({
+        user_id: `eq.${userId}`,
+        select: "id,user_id,source_id,upstream_id,payload_hash,bill,first_received_at,updated_at",
+        order: "updated_at.asc,id.asc", limit: "500"
+      });
+      if (cursor) query.set("or", `(updated_at.gt.${cursor.time},and(updated_at.eq.${cursor.time},id.gt.${cursor.id}))`);
+      const batch = await request(`/rest/v1/autoaccounting_inbox?${query}`, { headers: cloudHeaders(token), cache: "no-store" });
+      if (epoch !== authEpoch || session?.user?.id !== userId) throw new Error("账号已切换，请重新同步");
+      if (!Array.isArray(batch)) throw new Error("自动账单响应格式不正确");
+      batch.forEach(row => nextRows.set(row.id, row));
+      if (batch.length) { const last = batch[batch.length - 1]; cursor = { time: last.updated_at, id: last.id }; }
+      if (batch.length < 500) {
+        inboxOwner = userId; inboxRows = nextRows; inboxCursor = cursor;
+        return [...nextRows.values()];
+      }
+    }
+    throw new Error("自动账单数量过多，请缩小接收范围后重试");
+  }
+
+  async function autoRequest(path, options = {}) {
+    if (!/^\/devices(?:\/[a-f0-9-]+\/(?:rotate|revoke))?$/i.test(path)) throw new Error("无效的设备管理地址");
+    const current = await ensureSession();
+    return request(`/functions/v1/autoaccounting${path}`, {
+      ...options, headers: cloudHeaders(current.access_token), cache: "no-store"
+    });
+  }
+
   async function syncNow(showFeedback = false) {
     if (syncing || !configured() || !session || !navigator.onLine) return;
     syncing = true;
+    resyncNeeded = false;
+    const epoch = authEpoch;
     setStatus("syncing", "同步中", "正在合并电脑与手机数据…");
     try {
       const currentSession = await ensureSession();
       const userId = currentSession.user?.id;
       if (!userId) throw new Error("账号信息无效，请重新登录");
-      const remote = await fetchRemote(currentSession.access_token, userId);
+      let autoError = null;
+      const [remote, rows] = await Promise.all([
+        fetchRemote(currentSession.access_token, userId),
+        window.ZhangQingAuto ? fetchInbox(currentSession.access_token, userId, epoch).catch(error => { autoError = error; return null; }) : Promise.resolve(null)
+      ]);
+      if (epoch !== authEpoch || session?.user?.id !== userId) return;
       const localState = window.ZhangQingApp.getState();
-      const merged = remote?.payload ? window.ZhangQingApp.mergeStates(localState, remote.payload) : localState;
-      if (remote?.payload) window.ZhangQingApp.replaceState(merged);
+      let merged = remote?.payload ? window.ZhangQingApp.mergeStates(localState, remote.payload) : localState;
+      let autoAdded = 0;
+      if (rows) {
+        const result = window.ZhangQingAuto.applyToState(merged, rows);
+        merged = result.state; autoAdded = result.added;
+      }
+      if (remote?.payload || autoAdded) window.ZhangQingApp.replaceState(merged);
       await pushRemote(currentSession.access_token, userId, merged);
+      if (epoch !== authEpoch || session?.user?.id !== userId) return;
+      window.ZhangQingAuto?.onSync(rows || [...inboxRows.values()], window.ZhangQingApp.getState(), autoError
+        ? `原账本已同步；自动账单暂未连接：${friendlyError(autoError)}`
+        : autoAdded ? `已自动加入 ${autoAdded} 笔个人支出` : "自动账单已检查；新消费会在打开账清时同步");
       const syncedAt = new Date().toISOString();
       localStorage.setItem("zhangqing_last_sync_v1", syncedAt);
       renderCloudUI();
@@ -184,17 +253,24 @@
       setStatus("online", "已同步", "电脑与手机数据已同步。你可以继续记账。");
       if (showFeedback) window.ZhangQingApp.showToast("云端同步完成");
     } catch (error) {
+      if (epoch !== authEpoch) return;
       if (error.status === 401) saveSession(null);
       setStatus("error", "同步失败", friendlyError(error));
-    } finally { syncing = false; }
+    } finally {
+      syncing = false;
+      if (resyncNeeded) { clearTimeout(syncTimer); syncTimer = setTimeout(() => syncNow(false), 1200); }
+    }
   }
 
   async function logout() {
-    try {
-      if (session?.access_token) await request("/auth/v1/logout", { method: "POST", headers: cloudHeaders(session.access_token) });
-    } catch (_) {}
+    const token = session?.access_token;
     saveSession(null);
+    const epoch = authEpoch;
     setStatus("local", "仅本机", "已退出云同步，本机数据仍然保留。");
+    try {
+      if (token) await request("/auth/v1/logout", { method: "POST", headers: cloudHeaders(token) });
+    } catch (_) {}
+    if (epoch !== authEpoch) return;
   }
 
   function saveConfig() {
@@ -209,6 +285,7 @@
 
   function localChanged() {
     if (!session || !configured()) return;
+    if (syncing) resyncNeeded = true;
     clearTimeout(syncTimer);
     syncTimer = setTimeout(() => syncNow(false), 1200);
     setStatus(navigator.onLine ? "syncing" : "local", navigator.onLine ? "等待同步" : "离线", navigator.onLine ? "本机有新数据，即将同步。" : "已保存在本机，联网后自动同步。");
@@ -265,6 +342,9 @@
     if (button) { button.disabled = true; button.textContent = "已安装到设备"; }
   });
 
-  window.ZhangQingCloud = { localChanged, syncNow };
+  window.ZhangQingCloud = {
+    localChanged, syncNow, autoRequest,
+    getAutoContext: () => ({ loggedIn: Boolean(session?.refresh_token && session?.user?.id), userId: session?.user?.id || "", configured: configured() })
+  };
   document.addEventListener("DOMContentLoaded", init);
 })();

@@ -31,8 +31,9 @@ function emptyState() {
     customers: [],
     expenses: [],
     personalIncomes: [],
+    autoDecisions: [],
     allowanceSetting: { amount: 0, updatedAt: "" },
-    deleted: { orders: {}, customers: {}, expenses: {}, personalIncomes: {} },
+    deleted: { orders: {}, customers: {}, expenses: {}, personalIncomes: {}, autoDecisions: {} },
     updatedAt: new Date().toISOString()
   };
 }
@@ -44,6 +45,7 @@ function normalizeStateData(data) {
     orders: Array.isArray(data?.orders) ? data.orders : [],
     customers: Array.isArray(data?.customers) ? data.customers : [],
     expenses: Array.isArray(data?.expenses) ? data.expenses : [],
+    autoDecisions: Array.isArray(data?.autoDecisions) ? data.autoDecisions : [],
     personalIncomes: Array.isArray(data?.personalIncomes)
       ? data.personalIncomes.map(income => ({ ...income, type: income.type === "其他" ? "劳务" : income.type }))
       : [],
@@ -55,7 +57,8 @@ function normalizeStateData(data) {
       orders: data?.deleted?.orders || {},
       customers: data?.deleted?.customers || {},
       expenses: data?.deleted?.expenses || {},
-      personalIncomes: data?.deleted?.personalIncomes || {}
+      personalIncomes: data?.deleted?.personalIncomes || {},
+      autoDecisions: data?.deleted?.autoDecisions || {}
     }
   };
 }
@@ -92,7 +95,7 @@ function mergeCloudState(localData, remoteData) {
   const local = normalizeStateData(localData);
   const remote = normalizeStateData(remoteData);
   const merged = emptyState();
-  ["orders", "customers", "expenses", "personalIncomes"].forEach(collection => {
+  ["orders", "customers", "expenses", "personalIncomes", "autoDecisions"].forEach(collection => {
     const deleted = { ...remote.deleted[collection] };
     Object.entries(local.deleted[collection]).forEach(([id, time]) => {
       if (!deleted[id] || new Date(time) > new Date(deleted[id])) deleted[id] = time;
@@ -1651,6 +1654,30 @@ function init() {
 }
 
 window.ZhangQingApp = {
+  saveAutoDecision: (rowId, payloadHash) => {
+    if (!/^[a-f0-9-]{36}$/i.test(rowId) || !/^[a-f0-9]{64}$/i.test(payloadHash)) throw new Error("自动账单标识无效");
+    const decision = { id: rowId, action: "ignore", payloadHash, updatedAt: new Date().toISOString() };
+    const next = { ...state, autoDecisions: [...state.autoDecisions.filter(item => item.id !== rowId), decision], updatedAt: decision.updatedAt };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    state = next;
+    window.ZhangQingCloud?.localChanged();
+  },
+  acceptAutoExpense: row => {
+    const expense = window.ZhangQingAuto.expenseFromRow(row);
+    if (!expense || row.bill?.type !== "Expend") throw new Error("这笔记录请在原支付账单中核对后手工记账");
+    if (state.expenses.some(item => item.id === expense.id) || state.deleted.expenses[expense.id]) throw new Error("这笔记录已存在或曾被删除，不会再次新增");
+    expense.updatedAt = new Date().toISOString();
+    const next = { ...state, expenses: [...state.expenses, expense], updatedAt: expense.updatedAt };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    state = next;
+    renderAll();
+    window.ZhangQingCloud?.localChanged();
+    showToast("已确认为个人支出");
+  },
+  editAutoExpense: id => {
+    const expense = state.expenses.find(item => item.id === id);
+    if (expense) openExpenseDrawer(expense);
+  },
   openBillImport: () => openDrawer("#billImportDrawer"),
   importBillExpenses: incoming => {
     const known = new Set(state.expenses.map(item => item.id));
@@ -1679,8 +1706,9 @@ window.ZhangQingApp = {
   getState: () => JSON.parse(JSON.stringify(state)),
   mergeStates: mergeCloudState,
   replaceState: nextState => {
-    state = normalizeStateData(nextState);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    const normalized = normalizeStateData(nextState);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+    state = normalized;
     renderAll();
   },
   showToast
