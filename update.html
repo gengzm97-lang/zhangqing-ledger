@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#115c50">
+  <title>更新账清 · 保留账目</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#f2f7f4;color:#182d27;font:16px/1.8 system-ui,-apple-system,"Microsoft YaHei",sans-serif;min-height:100vh;display:grid;place-items:center;padding:22px}main{max-width:510px;background:white;border:1px solid #dce6df;border-radius:24px;padding:30px;box-shadow:0 18px 50px #174b3620}small{color:#427869;letter-spacing:2px}h1{font-size:27px;line-height:1.3;margin:12px 0 20px}p{color:#61766d}button,a{font:inherit}button{border:0;background:#115c50;color:white;border-radius:13px;padding:14px 20px;width:100%;font-weight:700;cursor:pointer}button:disabled{opacity:.6;cursor:wait}a{color:#115c50;display:inline-block;margin-top:12px}#status{min-height:56px;font-size:14px}.note{font-size:13px}button:focus-visible,a:focus-visible{outline:3px solid #ddb541;outline-offset:3px}
+  </style>
+</head>
+<body>
+  <main>
+    <small>账清 · 界面更新</small>
+    <h1>让手机加载最新界面</h1>
+    <p>只更新程序文件，不会清除账目、登录信息，也不会重置云端数据。</p>
+    <p class="note">请用原来安装账清的浏览器打开此页，不要使用无痕模式。更新完成后，会直接打开“手机自动记账连接”。</p>
+    <button id="update" type="button">更新界面，保留账目</button>
+    <p id="status" role="status" aria-live="polite">更新需要联网，通常几十秒即可完成。</p>
+    <a href="./?page=settings#autoAccountingSettings">返回账清</a>
+  </main>
+  <script>
+    "use strict";
+    const button = document.getElementById("update");
+    const status = document.getElementById("status");
+    function workerVersion(worker) {
+      return new Promise(resolve => {
+        if (!worker) return resolve(0);
+        const channel = new MessageChannel();
+        const finish = value => { clearTimeout(timer); channel.port1.close(); resolve(value); };
+        const timer = setTimeout(() => finish(0), 900);
+        channel.port1.onmessage = event => finish(Number(/zhangqing-pwa-v(\d+)/.exec(event.data?.cacheName || "")?.[1] || 0));
+        try { worker.postMessage({ type: "ZHANGQING_VERSION" }, [channel.port2]); } catch (_) { finish(0); }
+      });
+    }
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      status.textContent = "正在检查并下载新版界面，请保持网络连接…";
+      try {
+        if (!window.isSecureContext || !("serviceWorker" in navigator)) throw new Error("请在原来安装账清的浏览器里，用 HTTPS 地址打开此页。");
+        if (!navigator.onLine) throw new Error("当前没有网络，请联网后再试。原账目没有改动。");
+        const registration = await navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" });
+        await registration.update();
+        const deadline = Date.now() + 45000;
+        while (Date.now() < deadline) {
+          const version = await workerVersion(navigator.serviceWorker.controller);
+          if (version >= 21) {
+            status.textContent = "新版已准备好，正在打开手机自动记账连接…";
+            location.replace("./?page=settings&ui=" + version + "#autoAccountingSettings");
+            return;
+          }
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        throw new Error("新版还未下载完成。请保持联网，再点一次更新；原账目和登录信息都保留。");
+      } catch (error) {
+        status.textContent = error.message || "暂时未能更新，请检查网络后重试。";
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

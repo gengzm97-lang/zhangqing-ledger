@@ -266,6 +266,7 @@
   }
 
   window.ZhangQingAuto = { applyToState, stableExpenseId, expenseFromRow, onSync, onAuthChanged, refreshDevices };
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  // Deferred scripts run while readyState is "interactive"; wait for cloud.js too.
+  if (document.readyState !== "complete") document.addEventListener("DOMContentLoaded", init, { once: true });
   else init();
 })();

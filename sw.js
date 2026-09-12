@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "zhangqing-pwa-v20";
+const CACHE_NAME = "zhangqing-pwa-v21";
 const APP_ASSETS = [
   "./", "./index.html", "./styles.css", "./app.js", "./cloud.js", "./cloud-config.js",
   "./bill-parser.js", "./bill-import.js", "./vendor/xlsx.full.min.js",
@@ -9,11 +9,16 @@ const APP_ASSETS = [
 ];
 
 self.addEventListener("install", event => {
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_ASSETS)).then(() => self.skipWaiting()));
+  // Reload the actual files, not potentially stale HTTP-cache copies from the previous release.
+  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_ASSETS.map(url => new Request(url, { cache: "reload" })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", event => {
-  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key)))).then(() => self.clients.claim()));
+  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key.startsWith("zhangqing-pwa-v") && key !== CACHE_NAME).map(key => caches.delete(key)))).then(() => self.clients.claim()));
+});
+
+self.addEventListener("message", event => {
+  if (event.data?.type === "ZHANGQING_VERSION") event.ports?.[0]?.postMessage({ cacheName: CACHE_NAME });
 });
 
 self.addEventListener("fetch", event => {

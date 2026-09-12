@@ -1651,6 +1651,13 @@ function init() {
   setDateRange("month");
   setExpenseDateRange("month");
   renderAll();
+  const targetPage = new URLSearchParams(location.search).get("page");
+  if (targetPage && Object.prototype.hasOwnProperty.call(PAGE_META, targetPage)) {
+    switchPage(targetPage);
+    if (targetPage === "settings" && location.hash === "#autoAccountingSettings") {
+      setTimeout(() => $("#autoAccountingSettings")?.scrollIntoView({ block: "start", behavior: "smooth" }), 300);
+    }
+  }
 }
 
 window.ZhangQingApp = {
